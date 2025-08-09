@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../lib/supabaseClient"; // Make sure this path is correct
+import { useNavigate } from "react-router-dom"; // ✅ Add router hook
+import { supabase } from "../lib/supabaseClient";
 
 // --- Helper & Icon Components ---
 const LoadingSpinner = () => (
@@ -25,7 +26,6 @@ const HamburgerIcon = () => (
   </svg>
 );
 
-// --- New Hamburger Menu Component ---
 const HamburgerMenu = ({ onLogout }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -55,7 +55,6 @@ const HamburgerMenu = ({ onLogout }) => {
   );
 };
 
-// --- Core Components ---
 const Header = () => (
   <header className="p-6 bg-gray-900 text-white rounded-t-xl shadow-lg">
     <div className="text-center">
@@ -76,8 +75,8 @@ const AstrologyInputForm = ({ onSubmit, isLoading, message, clearMessage }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!chartData.trim() || !userQuestion.trim()) {
-      clearMessage(); // Clear previous message
-      return; // The validation is now handled in the parent component
+      clearMessage();
+      return;
     }
     onSubmit(chartData, userQuestion);
   };
@@ -178,11 +177,9 @@ const ResponseDisplay = ({ isLoading, response, error }) => {
   );
 };
 
-/**
- * Main App Component
- */
 export default function App() {
-  // New state to hold the user ID and track if the user data is still loading
+  const navigate = useNavigate(); // ✅ Router navigation hook
+
   const [userId, setUserId] = useState(null);
   const [isUserLoading, setIsUserLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -190,7 +187,6 @@ export default function App() {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState("");
 
-  // Effect to fetch the user ID from Supabase on component mount
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -198,28 +194,29 @@ export default function App() {
           data: { session },
           error,
         } = await supabase.auth.getSession();
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
+
         if (session && session.user) {
           setUserId(session.user.id);
+        } else {
+          navigate("/login"); // ✅ Redirect if not logged in
         }
       } catch (err) {
         console.error("Error fetching user session:", err.message);
-        // You might want to handle this error more gracefully in a real app
+        navigate("/login");
       } finally {
         setIsUserLoading(false);
       }
     };
     fetchUser();
-  }, []);
+  }, [navigate]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error("Error logging out:", error.message);
     }
-    // The onAuthStateChange listener in your context will handle the redirect.
+    navigate("/login"); // ✅ Redirect after logout
   };
 
   const handleAstrologyQuery = async (chartData, userQuestion) => {
@@ -240,7 +237,6 @@ export default function App() {
     }
 
     const baseApiUrl = import.meta.env.VITE_API_URI;
-
     if (!baseApiUrl) {
       setError(
         "Error: API URI not found. Please set VITE_API_URI in your .env file and restart the server."
@@ -253,29 +249,23 @@ export default function App() {
       const res = await fetch(`${baseApiUrl}/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // Send the correct payload to your backend server, now including the userId
         body: JSON.stringify({
-          userId: userId, // Pass the user ID here
+          userId: userId,
           chartData: chartData,
           userQuestion: userQuestion,
         }),
       });
 
       const data = await res.json();
-
-      // Handle potential errors from your server first
       if (!res.ok) {
         throw new Error(data.error || `API Error: ${res.status}`);
       }
 
-      // Parse the response from your backend server
-      const text = data.response;
-
-      if (!text) {
+      if (!data.response) {
         throw new Error("The response from the server was empty or malformed.");
       }
 
-      setResponse(text);
+      setResponse(data.response);
     } catch (err) {
       setError(err.message || "An unknown error occurred.");
     } finally {
