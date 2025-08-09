@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient"; // Make sure this path is correct
 
 // --- Helper & Icon Components ---
 const LoadingSpinner = () => (
@@ -7,29 +8,76 @@ const LoadingSpinner = () => (
   </div>
 );
 
+const HamburgerIcon = () => (
+  <svg
+    className="w-8 h-8 text-white"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M4 6h16M4 12h16m-7 6h7"
+    />
+  </svg>
+);
+
+// --- New Hamburger Menu Component ---
+const HamburgerMenu = ({ onLogout }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        aria-label="Open menu"
+      >
+        <HamburgerIcon />
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-xl z-10 border border-gray-700">
+          <button
+            onClick={() => {
+              onLogout();
+              setIsOpen(false);
+            }}
+            className="block w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-500 hover:text-white transition-colors duration-200"
+          >
+            Log Out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // --- Core Components ---
 const Header = () => (
-  <header className="text-center p-6 bg-gray-900 text-white rounded-t-xl shadow-lg">
-    <div className="flex justify-center items-center">
+  <header className="p-6 bg-gray-900 text-white rounded-t-xl shadow-lg">
+    <div className="text-center">
       <h1 className="text-4xl md:text-5xl font-bold font-serif tracking-wider">
         Pythia
       </h1>
+      <p className="text-indigo-300 mt-3 text-lg">
+        Paste your astrological chart data and ask any question about it.
+      </p>
     </div>
-    <p className="text-indigo-300 mt-3 text-lg">
-      Paste your astrological chart data and ask any question about it.
-    </p>
   </header>
 );
 
-const AstrologyInputForm = ({ onSubmit, isLoading }) => {
+const AstrologyInputForm = ({ onSubmit, isLoading, message, clearMessage }) => {
   const [chartData, setChartData] = useState("");
   const [userQuestion, setUserQuestion] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!chartData.trim() || !userQuestion.trim()) {
-      alert("Please fill in your Chart Data and your Question.");
-      return;
+      clearMessage(); // Clear previous message
+      return; // The validation is now handled in the parent component
     }
     onSubmit(chartData, userQuestion);
   };
@@ -74,6 +122,11 @@ const AstrologyInputForm = ({ onSubmit, isLoading }) => {
           required
         />
       </div>
+      {message && (
+        <div className="text-center text-red-400 bg-red-900 bg-opacity-50 p-3 rounded-lg border border-red-500">
+          {message}
+        </div>
+      )}
       <div className="text-center">
         <button
           type="submit"
@@ -129,59 +182,97 @@ const ResponseDisplay = ({ isLoading, response, error }) => {
  * Main App Component
  */
 export default function App() {
+  // New state to hold the user ID and track if the user data is still loading
+  const [userId, setUserId] = useState(null);
+  const [isUserLoading, setIsUserLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState("");
   const [error, setError] = useState(null);
+  const [message, setMessage] = useState("");
+
+  // Effect to fetch the user ID from Supabase on component mount
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+        if (error) {
+          throw error;
+        }
+        if (session && session.user) {
+          setUserId(session.user.id);
+        }
+      } catch (err) {
+        console.error("Error fetching user session:", err.message);
+        // You might want to handle this error more gracefully in a real app
+      } finally {
+        setIsUserLoading(false);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Error logging out:", error.message);
+    }
+    // The onAuthStateChange listener in your context will handle the redirect.
+  };
 
   const handleAstrologyQuery = async (chartData, userQuestion) => {
     setIsLoading(true);
     setResponse("");
     setError(null);
+    setMessage("");
 
-    // Access the API key using Vite's client-side environment variable syntax.
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!userId) {
+      setIsLoading(false);
+      setMessage("User not authenticated. Please log in.");
+      return;
+    }
+    if (!chartData.trim() || !userQuestion.trim()) {
+      setIsLoading(false);
+      setMessage("Please fill in your Chart Data and your Question.");
+      return;
+    }
 
-    if (!apiKey) {
+    const baseApiUrl = import.meta.env.VITE_API_URI;
+
+    if (!baseApiUrl) {
       setError(
-        "Error: Gemini API key not found. Please set VITE_GEMINI_API_KEY in your .env file and restart the server."
+        "Error: API URI not found. Please set VITE_API_URI in your .env file and restart the server."
       );
       setIsLoading(false);
       return;
     }
 
-    const prompt = `
-      You are an expert astrologer with deep knowledge of various astrological techniques including natal charts, synastry, composite charts, progressed charts, astrocartography, and zodiacal releasing.
-      Analyze the following astrological data and answer the user's question based on it. Provide a thoughtful, detailed, and insightful interpretation.
-      **Astrological Data:**
-      ---
-      ${chartData}
-      ---
-      **User's Question:**
-      ${userQuestion}
-      **Your Interpretation:**
-    `;
-
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-latest:generateContent?key=${apiKey}`;
-
     try {
-      const res = await fetch(apiUrl, {
+      const res = await fetch(`${baseApiUrl}/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // Send the correct payload to your backend server, now including the userId
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          userId: userId, // Pass the user ID here
+          chartData: chartData,
+          userQuestion: userQuestion,
         }),
       });
 
+      const data = await res.json();
+
+      // Handle potential errors from your server first
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error?.message || `API Error: ${res.status}`);
+        throw new Error(data.error || `API Error: ${res.status}`);
       }
 
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      // Parse the response from your backend server
+      const text = data.response;
 
       if (!text) {
-        throw new Error("The response from the AI was empty or malformed.");
+        throw new Error("The response from the server was empty or malformed.");
       }
 
       setResponse(text);
@@ -192,21 +283,32 @@ export default function App() {
     }
   };
 
+  if (isUserLoading) {
+    return <LoadingSpinner />;
+  }
+
   return (
-    <div className="bg-gray-900 min-h-screen font-sans text-white p-4 sm:p-6 lg:p-8 flex items-center justify-center">
-      <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl shadow-indigo-900/50 overflow-hidden">
-        <Header />
-        <main>
-          <AstrologyInputForm
-            onSubmit={handleAstrologyQuery}
-            isLoading={isLoading}
-          />
-          <ResponseDisplay
-            isLoading={isLoading}
-            response={response}
-            error={error}
-          />
-        </main>
+    <div className="bg-gray-900 min-h-screen font-sans text-white relative">
+      <div className="fixed top-4 right-4 z-20">
+        <HamburgerMenu onLogout={handleLogout} />
+      </div>
+      <div className="p-4 sm:p-6 lg:p-8 flex items-center justify-center">
+        <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl shadow-indigo-900/50 overflow-hidden">
+          <Header />
+          <main>
+            <AstrologyInputForm
+              onSubmit={handleAstrologyQuery}
+              isLoading={isLoading}
+              message={message}
+              clearMessage={() => setMessage("")}
+            />
+            <ResponseDisplay
+              isLoading={isLoading}
+              response={response}
+              error={error}
+            />
+          </main>
+        </div>
       </div>
     </div>
   );

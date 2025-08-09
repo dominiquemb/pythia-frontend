@@ -5,10 +5,12 @@ export default [
   // Public route
   route("login", "./routes/login.tsx"),
 
-  // This wrapper now handles all client-side auth checks
+  // Pathless layout route for all protected pages
   route("", "./protectedRoute/protectedRoute.tsx", [
-    // Protected routes go here
+    // The homepage is the index of the protected section
     index("./routes/home.tsx"),
+
+    // Other protected routes would go here
     // route("dashboard", "./routes/dashboard.tsx"),
   ]),
 ] satisfies RouteConfig;

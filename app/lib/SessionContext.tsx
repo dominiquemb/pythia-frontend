@@ -1,14 +1,21 @@
-// app/lib/SessionContext.jsx
-import React, { createContext, useContext, useEffect, useState } from "react";
-// ✅ Import the supabase client instance from your local file
+// app/lib/SessionContext.tsx
+import React, {
+  createContext,
+  useContext, // We will use this in other files
+  useEffect,
+  useState,
+  useMemo,
+} from "react";
 import { supabase } from "./supabaseClient";
-// ✅ Import the Session type directly from the official library
 import type { Session } from "@supabase/supabase-js";
 
-const SessionContext = createContext<{
+type SessionContextType = {
   session: Session | null;
   loading: boolean;
-}>({
+};
+
+// ✅ Export the context itself so other components can use it
+export const SessionContext = createContext<SessionContextType>({
   session: null,
   loading: true,
 });
@@ -33,20 +40,22 @@ export const SessionProvider = ({
       setSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
+  const value = useMemo(
+    () => ({
+      session,
+      loading,
+    }),
+    [session, loading]
+  );
+
   return (
-    <SessionContext.Provider value={{ session, loading }}>
-      {children}
-    </SessionContext.Provider>
+    <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
   );
 };
 
-export const useSession = () => {
-  const context = useContext(SessionContext);
-  if (context === undefined) {
-    throw new Error("useSession must be used within a SessionProvider");
-  }
-  return context;
-};
+// ❌ The custom useSession hook is removed from this file.

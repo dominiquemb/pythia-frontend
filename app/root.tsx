@@ -13,6 +13,7 @@ import { SessionProvider } from "./lib/SessionContext";
 import type { Route } from "./+types/root";
 import "./app.css";
 import { createClient } from "@supabase/supabase-js";
+import { AuthRedirector } from "./lib/AuthRedirector"; // ✅ 1. Import the new component
 
 // --------------------
 // Links
@@ -57,6 +58,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <SessionProvider>
+      <AuthRedirector /> {/* ✅ 2. Add the redirector component here */}
       <Outlet />
     </SessionProvider>
   );

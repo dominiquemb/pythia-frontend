@@ -1,24 +1,61 @@
-// app/ProtectedRoute/ProtectedRoute.jsx
-import { useState, useEffect } from "react";
-import { Navigate, Outlet } from "react-router-dom";
-// ✅ 1. Import your custom hook
-import { useSession } from "../lib/SessionContext";
+// app/lib/SessionContext.tsx
+import React, {
+  createContext,
+  useContext, // We will use this in other files
+  useEffect,
+  useState,
+  useMemo,
+} from "react";
+import { supabase } from "../lib/supabaseClient";
+import type { Session } from "@supabase/supabase-js";
 
-const ProtectedRoute = () => {
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // ✅ 2. Call your custom hook directly
-  const { session, loading } = useSession();
-
-  if (!isClient || loading) {
-    return <div>Loading...</div>;
-  }
-
-  return session ? <Outlet /> : <Navigate to="/login" replace />;
+type SessionContextType = {
+  session: Session | null;
+  loading: boolean;
 };
 
-export default ProtectedRoute;
+// ✅ Export the context itself so other components can use it
+export const SessionContext = createContext<SessionContextType>({
+  session: null,
+  loading: true,
+});
+
+export const SessionProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      session,
+      loading,
+    }),
+    [session, loading]
+  );
+
+  return (
+    <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
+  );
+};
+
+// ❌ The custom useSession hook is removed from this file.
