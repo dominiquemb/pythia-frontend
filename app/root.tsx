@@ -1,3 +1,4 @@
+// app/root.tsx
 import {
   isRouteErrorResponse,
   Links,
@@ -5,11 +6,17 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  redirect,
+  type LoaderFunctionArgs,
 } from "react-router";
-
+import { SessionProvider } from "./lib/SessionContext";
 import type { Route } from "./+types/root";
 import "./app.css";
+import { createClient } from "@supabase/supabase-js";
 
+// --------------------
+// Links
+// --------------------
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
@@ -23,6 +30,9 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+// --------------------
+// Layout
+// --------------------
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -41,10 +51,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+// --------------------
+// App
+// --------------------
 export default function App() {
-  return <Outlet />;
+  return (
+    <SessionProvider>
+      <Outlet />
+    </SessionProvider>
+  );
 }
 
+// --------------------
+// Error Boundary
+// --------------------
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let message = "Oops!";
   let details = "An unexpected error occurred.";

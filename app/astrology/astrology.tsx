@@ -1,84 +1,4 @@
-import React from "react";
-import { useFetcher } from "@remix-run/react";
-import { json, type ActionFunctionArgs } from "@remix-run/node";
-
-// --- Remix Action ---
-// This function runs ONLY on the server. It receives the form data,
-// securely accesses the API key, calls the Gemini API, and returns the result.
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const formData = await request.formData();
-  const chartData = formData.get("chartData");
-  const userQuestion = formData.get("userQuestion");
-
-  // Securely access the API key from server environment variables
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    return json(
-      {
-        error:
-          "Error: GEMINI_API_KEY not found on the server. Please set it in your .env file and restart.",
-      },
-      { status: 500 }
-    );
-  }
-
-  if (!chartData || !userQuestion) {
-    return json(
-      { error: "Please provide both chart data and a question." },
-      { status: 400 }
-    );
-  }
-
-  const prompt = `
-    You are an expert astrologer with deep knowledge of various astrological techniques including natal charts, synastry, composite charts, progressed charts, astrocartography, and zodiacal releasing.
-    Analyze the following astrological data and answer the user's question based on it. Provide a thoughtful, detailed, and insightful interpretation.
-    **Astrological Data:**
-    ---
-    ${chartData}
-    ---
-    **User's Question:**
-    ${userQuestion}
-    **Your Interpretation:**
-  `;
-
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-latest:generateContent?key=${apiKey}`;
-
-  try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return json(
-        { error: errorData.error?.message || `API Error: ${response.status}` },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!text) {
-      return json(
-        { error: "The response from the AI was empty or malformed." },
-        { status: 500 }
-      );
-    }
-
-    return json({ response: text, error: null });
-  } catch (err: any) {
-    return json(
-      { error: err.message || "An unknown error occurred." },
-      { status: 500 }
-    );
-  }
-};
+import React, { useState } from "react";
 
 // --- Helper & Icon Components ---
 const LoadingSpinner = () => (
@@ -101,13 +21,21 @@ const Header = () => (
   </header>
 );
 
-const AstrologyInputForm = ({ fetcher }: { fetcher: any }) => {
-  const isLoading =
-    fetcher.state === "submitting" || fetcher.state === "loading";
+const AstrologyInputForm = ({ onSubmit, isLoading }) => {
+  const [chartData, setChartData] = useState("");
+  const [userQuestion, setUserQuestion] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!chartData.trim() || !userQuestion.trim()) {
+      alert("Please fill in your Chart Data and your Question.");
+      return;
+    }
+    onSubmit(chartData, userQuestion);
+  };
 
   return (
-    // This form submits data to the `action` function without a page reload.
-    <fetcher.Form method="post" className="p-6 md:p-8 space-y-6">
+    <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
       <div>
         <label
           htmlFor="chartData"
@@ -117,8 +45,10 @@ const AstrologyInputForm = ({ fetcher }: { fetcher: any }) => {
         </label>
         <textarea
           id="chartData"
-          name="chartData" // The `name` attribute is crucial for form data
+          name="chartData"
           rows={10}
+          value={chartData}
+          onChange={(e) => setChartData(e.target.value)}
           placeholder="Paste your complete birth chart data here..."
           className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
           disabled={isLoading}
@@ -134,8 +64,10 @@ const AstrologyInputForm = ({ fetcher }: { fetcher: any }) => {
         </label>
         <input
           id="userQuestion"
-          name="userQuestion" // The `name` attribute is crucial for form data
+          name="userQuestion"
           type="text"
+          value={userQuestion}
+          onChange={(e) => setUserQuestion(e.target.value)}
           placeholder="e.g., What does my Mars in Scorpio reveal?"
           className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
           disabled={isLoading}
@@ -151,28 +83,24 @@ const AstrologyInputForm = ({ fetcher }: { fetcher: any }) => {
           {isLoading ? "Thinking..." : "Ask"}
         </button>
       </div>
-    </fetcher.Form>
+    </form>
   );
 };
 
-const ResponseDisplay = ({ fetcher }: { fetcher: any }) => {
-  const isLoading =
-    fetcher.state === "submitting" || fetcher.state === "loading";
-  const responseData = fetcher.data;
-
+const ResponseDisplay = ({ isLoading, response, error }) => {
   const renderContent = () => {
     if (isLoading) {
       return <LoadingSpinner />;
     }
-    if (responseData?.error) {
+    if (error) {
       return (
         <div className="text-red-400 bg-red-900 bg-opacity-50 p-4 rounded-lg border border-red-500">
-          {responseData.error}
+          {error}
         </div>
       );
     }
-    if (responseData?.response) {
-      const formattedResponse = responseData.response.replace(/\n/g, "<br />");
+    if (response) {
+      const formattedResponse = response.replace(/\n/g, "<br />");
       return (
         <div
           className="text-gray-300 leading-relaxed prose prose-invert max-w-none"
@@ -201,16 +129,83 @@ const ResponseDisplay = ({ fetcher }: { fetcher: any }) => {
  * Main App Component
  */
 export default function App() {
-  // The useFetcher hook manages the form submission, loading state, and data.
-  const fetcher = useFetcher();
+  const [isLoading, setIsLoading] = useState(false);
+  const [response, setResponse] = useState("");
+  const [error, setError] = useState(null);
+
+  const handleAstrologyQuery = async (chartData, userQuestion) => {
+    setIsLoading(true);
+    setResponse("");
+    setError(null);
+
+    // Access the API key using Vite's client-side environment variable syntax.
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    if (!apiKey) {
+      setError(
+        "Error: Gemini API key not found. Please set VITE_GEMINI_API_KEY in your .env file and restart the server."
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    const prompt = `
+      You are an expert astrologer with deep knowledge of various astrological techniques including natal charts, synastry, composite charts, progressed charts, astrocartography, and zodiacal releasing.
+      Analyze the following astrological data and answer the user's question based on it. Provide a thoughtful, detailed, and insightful interpretation.
+      **Astrological Data:**
+      ---
+      ${chartData}
+      ---
+      **User's Question:**
+      ${userQuestion}
+      **Your Interpretation:**
+    `;
+
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-latest:generateContent?key=${apiKey}`;
+
+    try {
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error?.message || `API Error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        throw new Error("The response from the AI was empty or malformed.");
+      }
+
+      setResponse(text);
+    } catch (err) {
+      setError(err.message || "An unknown error occurred.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="bg-gray-900 min-h-screen font-sans text-white p-4 sm:p-6 lg:p-8 flex items-center justify-center">
       <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl shadow-indigo-900/50 overflow-hidden">
         <Header />
         <main>
-          <AstrologyInputForm fetcher={fetcher} />
-          <ResponseDisplay fetcher={fetcher} />
+          <AstrologyInputForm
+            onSubmit={handleAstrologyQuery}
+            isLoading={isLoading}
+          />
+          <ResponseDisplay
+            isLoading={isLoading}
+            response={response}
+            error={error}
+          />
         </main>
       </div>
     </div>
