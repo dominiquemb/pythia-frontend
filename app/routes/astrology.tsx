@@ -408,7 +408,17 @@ const AstrologyQueryForm = ({
 
 const ResponseDisplay = ({ isLoading, response, error }) => {
   const renderContent = () => {
-    if (isLoading) return <LoadingSpinner />;
+    if (isLoading)
+      return (
+        <>
+          <p>Results take about 1 minute to generate. Please be patient.</p>
+          <p>
+            Your questions are never stored on our servers because we value your
+            privacy.
+          </p>
+          <LoadingSpinner />
+        </>
+      );
     if (error)
       return (
         <div className="text-red-400 bg-red-900/50 p-4 rounded-lg border border-red-500">
