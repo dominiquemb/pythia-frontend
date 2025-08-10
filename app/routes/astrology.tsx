@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // ✅ Add router hook
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
 // --- Helper & Icon Components ---
@@ -26,9 +26,8 @@ const HamburgerIcon = () => (
   </svg>
 );
 
-const HamburgerMenu = ({ onLogout }: any) => {
+const HamburgerMenu = ({ onLogout }) => {
   const [isOpen, setIsOpen] = useState(false);
-
   return (
     <div className="relative">
       <button
@@ -62,120 +61,308 @@ const Header = () => (
         Pythia
       </h1>
       <p className="text-indigo-300 mt-3 text-lg">
-        Paste your astrological chart data and ask any question about it.
+        Select a saved chart or add a new one to begin.
       </p>
     </div>
   </header>
 );
 
-// --- Instructions Component ---
-const Instructions = () => {
-  const [isOpen, setIsOpen] = useState(false);
+// --- Form Components ---
+
+const AddEventForm = ({ onSave, isLoading, saveMessage, clearSaveMessage }) => {
+  const [label, setLabel] = useState("");
+  const [year, setYear] = useState("");
+  const [month, setMonth] = useState("");
+  const [day, setDay] = useState("");
+  const [hour, setHour] = useState("");
+  const [minute, setMinute] = useState("");
+  const [ampm, setAmpm] = useState("AM");
+  const [location, setLocation] = useState("");
+  const [isTimeUnknown, setIsTimeUnknown] = useState(false);
+
+  useEffect(() => {
+    // Clear message on input change
+    if (saveMessage) clearSaveMessage();
+  }, [
+    label,
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    location,
+    isTimeUnknown,
+    ampm,
+    saveMessage,
+    clearSaveMessage,
+  ]);
+
+  const handleSave = async () => {
+    let finalHour = parseInt(hour, 10);
+    if (ampm === "PM" && finalHour < 12) {
+      finalHour += 12;
+    }
+    if (ampm === "AM" && finalHour === 12) {
+      finalHour = 0;
+    }
+
+    const eventData = {
+      label,
+      year: parseInt(year),
+      month: parseInt(month),
+      day: parseInt(day),
+      time: isTimeUnknown
+        ? "12:00"
+        : `${String(finalHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+      location,
+    };
+
+    if (
+      !label ||
+      !year ||
+      !month ||
+      !day ||
+      !location ||
+      (!isTimeUnknown && (hour === "" || minute === ""))
+    ) {
+      alert("Please fill all required fields for the new event.");
+      return;
+    }
+    const success = await onSave(eventData);
+    if (success) {
+      setLabel("");
+      setYear("");
+      setMonth("");
+      setDay("");
+      setHour("");
+      setMinute("");
+      setLocation("");
+      setIsTimeUnknown(false);
+      setAmpm("AM");
+    }
+  };
 
   return (
-    <div className="mb-4">
-      <button
-        type="button" // Prevents form submission
-        onClick={() => setIsOpen(!isOpen)}
-        className="text-indigo-400 hover:text-indigo-300 transition text-sm mb-2 inline-flex items-center focus:outline-none"
-      >
-        {isOpen ? "Hide Instructions" : "How can I get my birth data?"}
-        <svg
-          className={`w-4 h-4 ml-1 transform transition-transform ${isOpen ? "rotate-180" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          xmlns="http://www.w3.org/2000/svg"
+    <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700 space-y-4">
+      <h3 className="text-lg font-semibold text-white">Add New Event</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input
+          type="text"
+          placeholder="Label (e.g., John Smith)"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg"
+        />
+        <input
+          type="text"
+          placeholder="Location (e.g., Paris, France)"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg"
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <input
+          type="number"
+          placeholder="Year"
+          value={year}
+          onChange={(e) => setYear(e.target.value)}
+          className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg"
+        />
+        <input
+          type="number"
+          placeholder="Month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg"
+        />
+        <input
+          type="number"
+          placeholder="Day"
+          value={day}
+          onChange={(e) => setDay(e.target.value)}
+          className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg"
+        />
+      </div>
+      {!isTimeUnknown && (
+        <div className="grid grid-cols-3 gap-4">
+          <input
+            type="number"
+            placeholder="Hour (1-12)"
+            value={hour}
+            onChange={(e) => setHour(e.target.value)}
+            className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg"
+          />
+          <input
+            type="number"
+            placeholder="Minute (0-59)"
+            value={minute}
+            onChange={(e) => setMinute(e.target.value)}
+            className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg"
+          />
+          <select
+            value={ampm}
+            onChange={(e) => setAmpm(e.target.value)}
+            className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg"
+          >
+            <option value="AM">AM</option>
+            <option value="PM">PM</option>
+          </select>
+        </div>
+      )}
+      <div className="flex items-center justify-between">
+        <label className="flex items-center space-x-2 text-sm text-gray-400">
+          <input
+            type="checkbox"
+            checked={isTimeUnknown}
+            onChange={(e) => setIsTimeUnknown(e.target.checked)}
+            className="rounded bg-gray-600 border-gray-500 text-indigo-500 focus:ring-indigo-500"
+          />
+          <span>Time is unknown (uses 12:00 PM)</span>
+        </label>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isLoading}
+          className="px-5 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-gray-500 transition"
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M19 9l-7 7-7-7"
-          ></path>
-        </svg>
-      </button>
-      {isOpen && (
-        <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 text-gray-300 text-sm space-y-4 prose prose-invert prose-sm max-w-none">
-          <p>
-            Go to{" "}
-            <a
-              href="http://astrodienst.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-indigo-400 hover:underline"
-            >
-              astrodienst.com
-            </a>
-            , navigate to{" "}
-            <strong>Horoscopes &gt; Extended Chart Selection</strong>, and add a
-            new person or select an existing one. Click "Show the Chart," then
-            near the top of the page, click{" "}
-            <strong>PDF Show Additional Tables</strong>. Copy everything under
-            the <strong>Planetary positions</strong> section and paste it into
-            the app.
-          </p>
-          <div>
-            <p className="font-semibold text-gray-200">Example data:</p>
-            <pre className="bg-gray-900 p-3 whitespace-pre-wrap rounded-md text-xs overflow-x-auto max-h-48 overflow-y-auto">
-              {`Planet positions Jul.Day (http://jul.day/) 2448974.351378 TT, pT 59.1 sec Planet Longitude house Speed Latitude Declination A Sun i 26°10' 5" 9 1° 1' 5" 0° 0' 1" S 23°23' 4" S B Moon g 9°51'41" 7 13°58'27" 5° 1' 8" S 8°31' 7" S C Mercury i 7° 0'53" 8 1°21'12" 1°20'39" N 20° 9'22" S D Venus k 10°36'19" 11 1° 9'18" 2° 8'55" S 19°38'42" S E Mars d 25° 8'50"# 4 - 15'36" 3°20'39" N 24°23'34" N F Jupiter g 12° 2' 0" 7 7'12" 1°14'53" N 3°36'28" S G Saturn k 14°56'53" 11 5'33" 1° 0'50" S 17°19'15" S O Uranus j 16°50'50" 10 3'24" 0°24'40" S 22°47' 8" S I Neptune j 17°50' 3" 10 2' 9" 0°40'36" N 21°34'50" S J Pluto h 24° 8'14" 8 2' 8" 14° 7'35" N 5° 5'20" S K Mean Node i 21°10'29" 9 - 3'11" 0° 0' 0" N 23° 8'45" S L True Node i 21°29'51"D 9 14" 0° 0' 0" N 23°10' 1" S N Chiron e 23°28' 0"# 5 - 1'14" 6°58'16" S 7° 6'19" N Houses (Plac.) Declination Asc. a 7° 1'20" 2°47'15" N 2 b 14°35' 2" 16°12'50" N 3 c 11°25'45" 22° 9' 9" N IC d 4°11'10" 23°22'24" N 5 d 27°34' 1" 20°38'52" N 6 e 26°29'37" 12°41' 6" N Desc. g 7° 1'20" 2°47'15" S 8 h 14°35' 2" 16°12'50" S 9 i 11°25'45" 22° 9' 9" S MC j 4°11'10" 23°22'24" S 11 j 27°34' 1" 20°38'52" S 12 k 26°29'37" 12°41' 6" S`}
-            </pre>
-          </div>
-          <div className="mt-4 p-3 bg-indigo-900/50 rounded-lg border border-indigo-700">
-            <h4 className="font-bold text-indigo-300">Pro Tip 💡</h4>
-            <p className="mt-1">
-              You can put in multiple people's data to ask synastry questions.
-              Just label each person with a name right above their birth data,
-              and then ask something like, "What are the strengths between Mike
-              and I?"
-            </p>
-          </div>
+          {isLoading ? "Saving..." : "Save Event"}
+        </button>
+      </div>
+      {saveMessage && (
+        <div className="text-center text-green-400 bg-green-900/50 p-3 rounded-lg border border-green-500 mt-2">
+          {saveMessage}
         </div>
       )}
     </div>
   );
 };
 
-const AstrologyInputForm = ({
+const EventList = ({ events, checkedEvents, onToggle }) => (
+  <div className="space-y-3">
+    <h3 className="text-lg font-semibold text-white">
+      Select Events to Include
+    </h3>
+    {events.length > 0 ? (
+      events.map((event) => (
+        <div
+          key={event.event_id}
+          className="p-3 bg-gray-700/50 rounded-lg flex items-center space-x-4"
+        >
+          <input
+            type="checkbox"
+            id={`event-${event.event_id}`}
+            checked={!!checkedEvents[event.event_id]}
+            onChange={() => onToggle(event.event_id)}
+            className="h-5 w-5 rounded bg-gray-600 border-gray-500 text-indigo-500 focus:ring-indigo-500"
+          />
+          <label
+            htmlFor={`event-${event.event_id}`}
+            className="text-gray-200 cursor-pointer"
+          >
+            {event.label}
+          </label>
+        </div>
+      ))
+    ) : (
+      <p className="text-gray-500 italic">
+        No saved events. Add one above to get started.
+      </p>
+    )}
+    <p className="text-xs text-gray-400 pt-2">
+      Check one or more boxes to include that person/event in your question.
+    </p>
+  </div>
+);
+
+const ManualEntry = ({ manualChartData, setManualChartData, isEnabled }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="text-sm text-indigo-400 hover:text-indigo-300"
+      >
+        {isOpen ? "Close" : "Or, Enter Chart Data Manually"}
+      </button>
+      {isOpen && (
+        <div className="mt-2">
+          <textarea
+            rows={10}
+            value={manualChartData}
+            onChange={(e) => setManualChartData(e.target.value)}
+            placeholder="Paste your complete birth chart data here..."
+            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500"
+            disabled={!isEnabled}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AstrologyQueryForm = ({
   onSubmit,
+  onSaveEvent,
+  events,
+  checkedEvents,
+  onToggleEvent,
   isLoading,
   message,
-  clearMessage,
-}: any) => {
-  const [chartData, setChartData] = useState("");
+  saveMessage,
+  clearSaveMessage,
+}) => {
   const [userQuestion, setUserQuestion] = useState("");
+  const [manualChartData, setManualChartData] = useState("");
+  const [useManualData, setUseManualData] = useState(false);
 
-  const handleSubmit = (e: any) => {
+  const isAskDisabled =
+    isLoading ||
+    (useManualData
+      ? !manualChartData.trim()
+      : Object.keys(checkedEvents).filter((id) => checkedEvents[id]).length ===
+        0) ||
+    !userQuestion.trim();
+
+  const handleSubmit = (e) => {
     e.preventDefault();
-    if (!chartData.trim() || !userQuestion.trim()) {
-      clearMessage();
-      return;
-    }
-    onSubmit(chartData, userQuestion);
+    onSubmit(userQuestion, useManualData, manualChartData);
   };
 
   return (
     <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
+      <AddEventForm
+        onSave={onSaveEvent}
+        isLoading={isLoading}
+        saveMessage={saveMessage}
+        clearSaveMessage={clearSaveMessage}
+      />
+      <EventList
+        events={events}
+        checkedEvents={checkedEvents}
+        onToggle={onToggleEvent}
+      />
+
       <div>
-        <label
-          htmlFor="chartData"
-          className="block text-lg font-medium text-gray-200 mb-2"
-        >
-          Astrological Data
+        <label className="flex items-center space-x-2 text-sm text-gray-400">
+          <input
+            type="checkbox"
+            checked={useManualData}
+            onChange={(e) => setUseManualData(e.target.checked)}
+            className="rounded bg-gray-600 border-gray-500 text-indigo-500 focus:ring-indigo-500"
+          />
+          <span>Enter chart data manually for this query</span>
         </label>
-        <Instructions />
-        <textarea
-          id="chartData"
-          name="chartData"
-          rows={10}
-          value={chartData}
-          onChange={(e) => setChartData(e.target.value)}
-          placeholder="Paste your complete birth chart data here..."
-          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-          disabled={isLoading}
-          required
-        />
+        {useManualData && (
+          <ManualEntry
+            manualChartData={manualChartData}
+            setManualChartData={setManualChartData}
+            isEnabled={!isLoading}
+          />
+        )}
       </div>
+
       <div>
         <label
           htmlFor="userQuestion"
@@ -185,46 +372,49 @@ const AstrologyInputForm = ({
         </label>
         <input
           id="userQuestion"
-          name="userQuestion"
           type="text"
           value={userQuestion}
           onChange={(e) => setUserQuestion(e.target.value)}
           placeholder="e.g., What does my Mars in Scorpio reveal?"
-          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg"
           disabled={isLoading}
           required
         />
       </div>
+
       {message && (
-        <div className="text-center text-red-400 bg-red-900 bg-opacity-50 p-3 rounded-lg border border-red-500">
+        <div className="text-center text-red-400 bg-red-900/50 p-3 rounded-lg border border-red-500">
           {message}
         </div>
       )}
+
       <div className="text-center">
         <button
           type="submit"
-          className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 disabled:bg-gray-500 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
-          disabled={isLoading}
+          className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 disabled:bg-gray-500 disabled:cursor-not-allowed transition-all"
+          disabled={isAskDisabled}
         >
           {isLoading ? "Thinking..." : "Ask"}
         </button>
+        {isAskDisabled && !isLoading && (
+          <p className="text-xs text-gray-500 mt-2">
+            Please select at least one event and enter a question.
+          </p>
+        )}
       </div>
     </form>
   );
 };
 
-const ResponseDisplay = ({ isLoading, response, error }: any) => {
+const ResponseDisplay = ({ isLoading, response, error }) => {
   const renderContent = () => {
-    if (isLoading) {
-      return <LoadingSpinner />;
-    }
-    if (error) {
+    if (isLoading) return <LoadingSpinner />;
+    if (error)
       return (
-        <div className="text-red-400 bg-red-900 bg-opacity-50 p-4 rounded-lg border border-red-500">
+        <div className="text-red-400 bg-red-900/50 p-4 rounded-lg border border-red-500">
           {error}
         </div>
       );
-    }
     if (response) {
       const formattedResponse = response.replace(/\n/g, "<br />");
       return (
@@ -242,7 +432,7 @@ const ResponseDisplay = ({ isLoading, response, error }: any) => {
   };
 
   return (
-    <div className="p-6 md:p-8 bg-gray-800 bg-opacity-50 rounded-b-xl min-h-[200px] flex flex-col justify-center">
+    <div className="p-6 md:p-8 bg-gray-800/50 rounded-b-xl min-h-[200px] flex flex-col justify-center">
       <h2 className="text-2xl font-semibold text-white mb-4 border-b border-gray-600 pb-2">
         Results
       </h2>
@@ -252,115 +442,167 @@ const ResponseDisplay = ({ isLoading, response, error }: any) => {
 };
 
 export default function App() {
-  const navigate = useNavigate(); // ✅ Router navigation hook
-
+  const navigate = useNavigate();
   const [userId, setUserId] = useState(null);
   const [isUserLoading, setIsUserLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
   const [message, setMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState(""); // New state for save event messages
+  const [events, setEvents] = useState([]);
+  const [checkedEvents, setCheckedEvents] = useState({});
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchUserAndEvents = async () => {
       try {
         const {
           data: { session },
-          error,
+          error: sessionError,
         } = await supabase.auth.getSession();
-        if (error) throw error;
-
-        if (session && session.user) {
-          setUserId(session.user.id as any);
+        if (sessionError) throw sessionError;
+        if (session?.user) {
+          setUserId(session.user.id);
+          await fetchEvents(session.user.id);
         } else {
-          navigate("/home"); // ✅ Redirect if not logged in
+          navigate("/home");
         }
       } catch (err) {
-        if (err instanceof Error) {
-          console.error("Error fetching user session:", err.message);
-        } else {
-          console.error("Error fetching user session:", err);
-        }
+        console.error("Error fetching user session:", err.message);
         navigate("/home");
       } finally {
         setIsUserLoading(false);
       }
     };
-    fetchUser();
+    fetchUserAndEvents();
   }, [navigate]);
 
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error("Error logging out:", error.message);
+  const fetchEvents = async (currentUserId) => {
+    const baseApiUrl = import.meta.env.VITE_API_URI;
+    if (!baseApiUrl || !currentUserId) return;
+    try {
+      const res = await fetch(`${baseApiUrl}/events/${currentUserId}`);
+      if (!res.ok) throw new Error("Failed to fetch events");
+      const data = await res.json();
+      setEvents(data);
+    } catch (err) {
+      setError(`Failed to load saved events: ${err.message}`);
     }
-    navigate("/home"); // ✅ Redirect after logout
   };
 
-  const handleAstrologyQuery = async (
-    chartData: string,
-    userQuestion: string
-  ) => {
+  const handleSaveEvent = async (eventData) => {
     setIsLoading(true);
-    setResponse("");
     setError(null);
     setMessage("");
-
-    if (!userId) {
-      setIsLoading(false);
-      setMessage("User not authenticated. Please log in.");
-      return;
-    }
-    if (!chartData.trim() || !userQuestion.trim()) {
-      setIsLoading(false);
-      setMessage("Please fill in your Chart Data and your Question.");
-      return;
-    }
-
+    setSaveMessage(""); // Clear previous save message
     const baseApiUrl = import.meta.env.VITE_API_URI;
-    if (!baseApiUrl) {
-      setError(
-        "Error: API URI not found. Please set VITE_API_URI in your .env file and restart the server."
-      );
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const res = await fetch(`${baseApiUrl}/query`, {
+      const res = await fetch(`${baseApiUrl}/natal-chart`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: userId,
-          chartData: chartData,
-          userQuestion: userQuestion,
-        }),
+        body: JSON.stringify({ ...eventData, userId }),
       });
-
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || `API Error: ${res.status}`);
-      }
+      if (!res.ok) throw new Error(data.error || "Failed to save event");
 
-      if (!data.response) {
-        throw new Error("The response from the server was empty or malformed.");
-      }
-
-      setResponse(data.response);
+      const newEvent = {
+        ...data,
+        label: eventData.label,
+        event_id: data.event_id,
+        event_data: JSON.stringify(data),
+      };
+      setEvents((prevEvents) => [...prevEvents, newEvent]);
+      setSaveMessage("Event saved successfully!"); // Use the new state
+      return true;
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("An unknown error occurred.");
-      }
+      setSaveMessage(`Save failed: ${err.message}`); // Use the new state for save errors too
+      return false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isUserLoading) {
-    return <LoadingSpinner />;
-  }
+  const handleToggleEvent = (eventId) => {
+    setCheckedEvents((prev) => {
+      const newCheckedEvents = { ...prev };
+      if (newCheckedEvents[eventId]) {
+        delete newCheckedEvents[eventId];
+      } else {
+        newCheckedEvents[eventId] = true;
+      }
+      return newCheckedEvents;
+    });
+  };
+
+  const handleAstrologyQuery = async (
+    userQuestion,
+    useManualData,
+    manualChartData
+  ) => {
+    setIsLoading(true);
+    setResponse("");
+    setError(null);
+    setMessage("");
+    setSaveMessage(""); // Clear save message when asking a question
+
+    let finalChartData = "";
+    if (useManualData) {
+      finalChartData = manualChartData;
+    } else {
+      const selectedEventIds = Object.keys(checkedEvents).filter(
+        (id) => checkedEvents[id]
+      );
+      finalChartData = events
+        .filter((event) => selectedEventIds.includes(String(event.event_id)))
+        .map((event) => {
+          let parsedData;
+          try {
+            parsedData =
+              typeof event.event_data === "string"
+                ? JSON.parse(event.event_data)
+                : event.event_data;
+          } catch (e) {
+            console.error("Error parsing event_data:", e);
+            parsedData = { error: "Malformed chart data" };
+          }
+          return `Chart for ${event.label}:\n${JSON.stringify(parsedData, null, 2)}`;
+        })
+        .join("\n\n---\n\n");
+    }
+
+    if (!finalChartData.trim() || !userQuestion.trim()) {
+      setIsLoading(false);
+      setMessage("Please provide chart data and a question.");
+      return;
+    }
+
+    const baseApiUrl = import.meta.env.VITE_API_URI;
+    try {
+      const res = await fetch(`${baseApiUrl}/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          chartData: finalChartData,
+          userQuestion,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `API Error: ${res.status}`);
+      setResponse(data.response);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/home");
+  };
+
+  if (isUserLoading) return <LoadingSpinner />;
 
   return (
     <div className="bg-gray-900 min-h-screen font-sans text-white relative">
@@ -371,11 +613,16 @@ export default function App() {
         <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl shadow-indigo-900/50 overflow-hidden">
           <Header />
           <main>
-            <AstrologyInputForm
+            <AstrologyQueryForm
               onSubmit={handleAstrologyQuery}
+              onSaveEvent={handleSaveEvent}
+              events={events}
+              checkedEvents={checkedEvents}
+              onToggleEvent={handleToggleEvent}
               isLoading={isLoading}
               message={message}
-              clearMessage={() => setMessage("")}
+              saveMessage={saveMessage}
+              clearSaveMessage={() => setSaveMessage("")}
             />
             <ResponseDisplay
               isLoading={isLoading}
