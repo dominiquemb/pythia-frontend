@@ -1,4 +1,4 @@
-// app/lib/SessionContext.tsx
+// app/protectedRoute/protectedRoute.tsx
 import React, { createContext, useEffect, useState, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
@@ -42,8 +42,22 @@ export const SessionProvider = ({
 
   // ✅ Redirect to /login when not authenticated
   useEffect(() => {
+    // Add these logs to see the decision-making process
+    console.log("[SessionProvider] Checking auth state...", {
+      loading,
+      hasSession: !!session,
+    });
+
     if (!loading && !session) {
-      navigate("/login", { replace: true });
+      // Use console.error to make this log stand out in the console
+      console.error(
+        "[SessionProvider] DECISION: No session found. Redirecting to /home."
+      );
+      navigate("/home", { replace: true });
+    } else {
+      console.log(
+        "[SessionProvider] No redirect needed (still loading or session exists)."
+      );
     }
   }, [loading, session, navigate]);
 

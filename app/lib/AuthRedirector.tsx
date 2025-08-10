@@ -22,7 +22,7 @@ export function AuthRedirector() {
       return;
     }
 
-    const isAuthPage = pathname === "/login";
+    const isAuthPage = pathname === "/login" || pathname === "/home";
 
     if (session && isAuthPage) {
       console.log(
