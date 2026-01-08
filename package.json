@@ -9,7 +9,7 @@
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
-    "@react-router/node": "^7.7.1",
+    "@react-router/node": "^7.9.4",
     "@react-router/serve": "^7.7.1",
     "@supabase/auth-ui-react": "^0.4.7",
     "@supabase/supabase-js": "^2.54.0",
