@@ -2,7 +2,7 @@
 import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
 export default [
-  // Public route
+  // Public routes
   route("home", "./routes/home.tsx"),
 
   route("login", "./routes/login.tsx"),
@@ -14,5 +14,8 @@ export default [
 
     // Chart viewer page
     route("chart-viewer", "./routes/chart-viewer.tsx"),
+
+    // Password reset page (protected - user has session from email link)
+    route("reset-password", "./routes/reset-password.tsx"),
   ]),
 ] satisfies RouteConfig;
