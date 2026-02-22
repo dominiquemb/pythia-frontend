@@ -128,30 +128,6 @@ const Header = () => (
   </header>
 );
 
-const ViewModeToggle = ({ mode, onChange }) => (
-  <div className="flex items-center justify-center gap-2 mb-4">
-    <button
-      onClick={() => onChange('single')}
-      className={`px-4 py-2 rounded-lg transition ${
-        mode === 'single'
-          ? 'bg-indigo-600 text-white'
-          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-      }`}
-    >
-      Single Response
-    </button>
-    <button
-      onClick={() => onChange('chat')}
-      className={`px-4 py-2 rounded-lg transition ${
-        mode === 'chat'
-          ? 'bg-indigo-600 text-white'
-          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-      }`}
-    >
-      Chat History
-    </button>
-  </div>
-);
 
 // --- Form Components ---
 
@@ -580,9 +556,8 @@ const AstrologyQueryForm = ({
   onToggleProgressed,
   progressedTimezones,
   onProgressedTimezoneChange,
-  viewMode,
-  saveMessages,
-  setSaveMessages,
+  singleResponseMode,
+  setSingleResponseMode,
 }: any) => {
   const [userQuestion, setUserQuestion] = useState("");
   const [includeTransits, setIncludeTransits] = useState(true);
@@ -660,17 +635,15 @@ const AstrologyQueryForm = ({
         setTransitTimestamp={setTransitTimestamp}
       />
 
-      {viewMode === 'chat' && (
-        <label className="flex items-center space-x-2 text-sm text-gray-300">
-          <input
-            type="checkbox"
-            checked={saveMessages}
-            onChange={(e) => setSaveMessages(e.target.checked)}
-            className="rounded bg-gray-600 border-gray-500 text-indigo-500"
-          />
-          <span>Save this message to chat history</span>
-        </label>
-      )}
+      <label className="flex items-center space-x-2 text-sm text-gray-300">
+        <input
+          type="checkbox"
+          checked={singleResponseMode}
+          onChange={(e) => setSingleResponseMode(e.target.checked)}
+          className="rounded bg-gray-600 border-gray-500 text-indigo-500"
+        />
+        <span>Single response mode (don't save to chat history)</span>
+      </label>
 
       {message && (
         <div className="text-center text-red-400 bg-red-900/50 p-3 rounded-lg border border-red-500">
@@ -839,10 +812,9 @@ export default function App() {
   };
 
   // Chat mode state
-  const [viewMode, setViewMode] = useState<'single' | 'chat'>('single');
+  const [singleResponseMode, setSingleResponseMode] = useState<boolean>(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [currentSessionKey, setCurrentSessionKey] = useState<string>('');
-  const [saveMessages, setSaveMessages] = useState<boolean>(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
 
   // This initial effect just verifies the user and sets their ID
@@ -882,11 +854,11 @@ export default function App() {
 
     if (newSessionKey !== currentSessionKey) {
       setCurrentSessionKey(newSessionKey);
-      if (viewMode === 'chat') {
+      if (!singleResponseMode) {
         loadChatHistory(newSessionKey);
       }
     }
-  }, [checkedEvents, userId, viewMode]);
+  }, [checkedEvents, userId, singleResponseMode]);
 
   const generateSessionKey = (userId: string, eventIds: number[]): string => {
     if (eventIds.length === 0) {
@@ -1112,15 +1084,15 @@ export default function App() {
     // Empty array = general astrology questions
 
     const baseApiUrl = import.meta.env.VITE_API_URI;
-    const endpoint = viewMode === 'chat' ? '/chat' : '/query';
+    const endpoint = singleResponseMode ? '/query' : '/chat';
 
     const requestBody = {
       userId,
       chartData: JSON.stringify(chartDataForQuery),
       ...queryPayload,
-      ...(viewMode === 'chat' && {
+      ...(!singleResponseMode && {
         sessionKey: currentSessionKey,
-        saveToHistory: saveMessages,
+        saveToHistory: true,
       }),
     };
 
@@ -1137,8 +1109,9 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `API Error: ${res.status}`);
 
-      if (viewMode === 'single') {
+      if (singleResponseMode) {
         setResponse(data.response);
+        setChatHistory([]); // Clear chat history in single response mode
       } else {
         // Add to chat history immediately
         const newMessage: ChatMessage = {
@@ -1149,6 +1122,7 @@ export default function App() {
           createdAt: new Date().toISOString(),
         };
         setChatHistory((prev) => [...prev, newMessage]);
+        setResponse(''); // Clear single response
       }
     } catch (err) {
       setError(err.message);
@@ -1173,8 +1147,23 @@ export default function App() {
         <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl shadow-indigo-900/50 overflow-hidden">
           <Header />
           <main>
-            <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+            {/* Chat History / Response Display at Top */}
+            {singleResponseMode ? (
+              <ResponseDisplay
+                isLoading={isLoading}
+                response={response}
+                error={error}
+              />
+            ) : (
+              <ChatHistoryDisplay
+                messages={chatHistory}
+                isLoading={isLoading}
+                error={error}
+                onClearSession={handleClearSession}
+              />
+            )}
 
+            {/* Input Form at Bottom */}
             <AstrologyQueryForm
               onSubmit={handleAstrologyQuery}
               onSaveEvent={handleSaveEvent}
@@ -1192,25 +1181,9 @@ export default function App() {
               onToggleProgressed={onToggleProgressed}
               progressedTimezones={progressedTimezones}
               onProgressedTimezoneChange={handleProgressedTimezoneChange}
-              viewMode={viewMode}
-              saveMessages={saveMessages}
-              setSaveMessages={setSaveMessages}
+              singleResponseMode={singleResponseMode}
+              setSingleResponseMode={setSingleResponseMode}
             />
-
-            {viewMode === 'single' ? (
-              <ResponseDisplay
-                isLoading={isLoading}
-                response={response}
-                error={error}
-              />
-            ) : (
-              <ChatHistoryDisplay
-                messages={chatHistory}
-                isLoading={isLoading}
-                error={error}
-                onClearSession={handleClearSession}
-              />
-            )}
           </main>
         </div>
       </div>
