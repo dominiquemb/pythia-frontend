@@ -12,7 +12,7 @@ export default [
     // The homepage is the index of the protected section
     index("./routes/astrology.tsx"),
 
-    // Other protected routes would go here
-    // route("dashboard", "./routes/dashboard.tsx"),
+    // Chart viewer page
+    route("chart-viewer", "./routes/chart-viewer.tsx"),
   ]),
 ] satisfies RouteConfig;

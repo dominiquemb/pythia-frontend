@@ -69,6 +69,7 @@ const PencilIcon = () => (
 );
 
 const HamburgerMenu = ({ onLogout }) => {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   return (
     <div className="relative">
@@ -81,6 +82,24 @@ const HamburgerMenu = ({ onLogout }) => {
       </button>
       {isOpen && (
         <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-xl z-10 border border-gray-700">
+          <button
+            onClick={() => {
+              navigate("/chart-viewer");
+              setIsOpen(false);
+            }}
+            className="block w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-indigo-600 hover:text-white transition-colors duration-200"
+          >
+            Chart Viewer
+          </button>
+          <button
+            onClick={() => {
+              navigate("/");
+              setIsOpen(false);
+            }}
+            className="block w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-indigo-600 hover:text-white transition-colors duration-200"
+          >
+            Astrology Query
+          </button>
           <button
             onClick={() => {
               onLogout();
