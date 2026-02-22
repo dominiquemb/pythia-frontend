@@ -1,8 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { DateTime } from "luxon";
 import { commonTimezones } from "../lib/timezones";
+
+// --- TypeScript Types ---
+interface ChatMessage {
+  messageId: number;
+  userMessage: string;
+  assistantResponse: string;
+  eventIdsUsed: number[];
+  createdAt: string;
+}
 
 // --- Helper & Icon Components ---
 const LoadingSpinner = () => (
@@ -98,6 +107,31 @@ const Header = () => (
       </p>
     </div>
   </header>
+);
+
+const ViewModeToggle = ({ mode, onChange }) => (
+  <div className="flex items-center justify-center gap-2 mb-4">
+    <button
+      onClick={() => onChange('single')}
+      className={`px-4 py-2 rounded-lg transition ${
+        mode === 'single'
+          ? 'bg-indigo-600 text-white'
+          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+      }`}
+    >
+      Single Response
+    </button>
+    <button
+      onClick={() => onChange('chat')}
+      className={`px-4 py-2 rounded-lg transition ${
+        mode === 'chat'
+          ? 'bg-indigo-600 text-white'
+          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+      }`}
+    >
+      Chat History
+    </button>
+  </div>
 );
 
 // --- Form Components ---
@@ -525,8 +559,11 @@ const AstrologyQueryForm = ({
   saveMessage,
   progressedChecks,
   onToggleProgressed,
-  progressedTimezones, // ✅ Add this prop
+  progressedTimezones,
   onProgressedTimezoneChange,
+  viewMode,
+  saveMessages,
+  setSaveMessages,
 }: any) => {
   const [userQuestion, setUserQuestion] = useState("");
   const [includeTransits, setIncludeTransits] = useState(true);
@@ -534,10 +571,7 @@ const AstrologyQueryForm = ({
     DateTime.now().toFormat("yyyy-MM-dd'T'HH:mm")
   );
 
-  const isAskDisabled =
-    isLoading ||
-    Object.keys(checkedEvents).filter((id) => checkedEvents[id]).length === 0 ||
-    !userQuestion.trim();
+  const isAskDisabled = isLoading || !userQuestion.trim();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -607,6 +641,18 @@ const AstrologyQueryForm = ({
         setTransitTimestamp={setTransitTimestamp}
       />
 
+      {viewMode === 'chat' && (
+        <label className="flex items-center space-x-2 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={saveMessages}
+            onChange={(e) => setSaveMessages(e.target.checked)}
+            className="rounded bg-gray-600 border-gray-500 text-indigo-500"
+          />
+          <span>Save this message to chat history</span>
+        </label>
+      )}
+
       {message && (
         <div className="text-center text-red-400 bg-red-900/50 p-3 rounded-lg border border-red-500">
           {message}
@@ -623,7 +669,7 @@ const AstrologyQueryForm = ({
         </button>
         {isAskDisabled && !isLoading && (
           <p className="text-xs text-gray-500 mt-2">
-            Please select at least one event and enter a question.
+            Please enter a question.
           </p>
         )}
       </div>
@@ -676,6 +722,85 @@ const ResponseDisplay = ({ isLoading, response, error }) => {
   );
 };
 
+const ChatHistoryDisplay = ({ messages, isLoading, error, onClearSession }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  return (
+    <div className="p-6 md:p-8 bg-gray-800/50 rounded-b-xl min-h-[400px] max-h-[600px] flex flex-col">
+      <div className="flex justify-between items-center mb-4 border-b border-gray-600 pb-2">
+        <h2 className="text-2xl font-semibold text-white">Chat History</h2>
+        {messages.length > 0 && (
+          <button
+            onClick={onClearSession}
+            className="text-sm text-red-400 hover:text-red-300"
+          >
+            Clear Session
+          </button>
+        )}
+      </div>
+
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto space-y-4 pr-2"
+      >
+        {messages.length === 0 && !isLoading && (
+          <div className="text-center text-gray-500 italic mt-8">
+            No messages yet. Ask a question to start your chat!
+          </div>
+        )}
+
+        {messages.map((msg) => (
+          <div key={msg.messageId} className="space-y-2">
+            {/* User message */}
+            <div className="flex justify-end">
+              <div className="bg-indigo-600 text-white rounded-lg px-4 py-2 max-w-[80%]">
+                {msg.userMessage}
+              </div>
+            </div>
+
+            {/* Assistant response */}
+            <div className="flex justify-start">
+              <div className="bg-gray-700 text-gray-200 rounded-lg px-4 py-3 max-w-[80%]">
+                <div
+                  className="prose prose-invert prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{
+                    __html: msg.assistantResponse.replace(/\n/g, '<br />')
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Timestamp */}
+            <div className="text-xs text-gray-500 text-right">
+              {new Date(msg.createdAt).toLocaleString()}
+            </div>
+          </div>
+        ))}
+
+        {isLoading && (
+          <div className="flex justify-start">
+            <div className="bg-gray-700 rounded-lg px-4 py-3">
+              <LoadingSpinner />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="mt-4 text-red-400 bg-red-900/50 p-3 rounded-lg border border-red-500">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   const navigate = useNavigate();
   const [session, setSession] = useState(null);
@@ -693,6 +818,13 @@ export default function App() {
   const handleProgressedTimezoneChange = (eventId, timezone) => {
     setProgressedTimezones((prev) => ({ ...prev, [eventId]: timezone }));
   };
+
+  // Chat mode state
+  const [viewMode, setViewMode] = useState<'single' | 'chat'>('single');
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [currentSessionKey, setCurrentSessionKey] = useState<string>('');
+  const [saveMessages, setSaveMessages] = useState<boolean>(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
 
   // This initial effect just verifies the user and sets their ID
   useEffect(() => {
@@ -717,6 +849,86 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [saveMessage]);
+
+  // Update session key when checked events or userId changes
+  useEffect(() => {
+    if (!userId) return;
+
+    const selectedIds = Object.keys(checkedEvents)
+      .filter((id) => checkedEvents[id])
+      .map(Number)
+      .sort((a, b) => a - b);
+
+    const newSessionKey = generateSessionKey(userId, selectedIds);
+
+    if (newSessionKey !== currentSessionKey) {
+      setCurrentSessionKey(newSessionKey);
+      if (viewMode === 'chat') {
+        loadChatHistory(newSessionKey);
+      }
+    }
+  }, [checkedEvents, userId, viewMode]);
+
+  const generateSessionKey = (userId: string, eventIds: number[]): string => {
+    if (eventIds.length === 0) {
+      return `user_${userId}_events_general`;
+    }
+    const sortedIds = eventIds.sort((a, b) => a - b).join('-');
+    return `user_${userId}_events_${sortedIds}`;
+  };
+
+  const loadChatHistory = async (sessionKey: string) => {
+    if (!sessionKey || !userId) return;
+
+    setIsLoadingHistory(true);
+    const token = await getFreshToken();
+    if (!token) return;
+
+    const baseApiUrl = import.meta.env.VITE_API_URI;
+    try {
+      const res = await fetch(
+        `${baseApiUrl}/chat/${userId}/${sessionKey}?limit=100`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `${token}`,
+          },
+        }
+      );
+      if (!res.ok) throw new Error('Failed to load chat history');
+      const data = await res.json();
+      setChatHistory(data.messages || []);
+    } catch (err) {
+      console.error('Failed to load chat history:', err);
+      setChatHistory([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleClearSession = async () => {
+    if (!window.confirm('Clear all messages in this chat session?')) return;
+
+    const token = await getFreshToken();
+    if (!token) return;
+
+    const baseApiUrl = import.meta.env.VITE_API_URI;
+    try {
+      const res = await fetch(
+        `${baseApiUrl}/chat-session/${userId}/${currentSessionKey}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `${token}` },
+        }
+      );
+
+      if (!res.ok) throw new Error('Failed to clear session');
+      setChatHistory([]);
+      setSaveMessage('Chat session cleared successfully.');
+    } catch (err) {
+      setError(`Failed to clear session: ${err.message}`);
+    }
+  };
 
   const getFreshToken = async () => {
     const {
@@ -864,42 +1076,61 @@ export default function App() {
 
   const handleAstrologyQuery = async (queryPayload) => {
     setIsLoading(true);
-    setResponse("");
     setError(null);
     setSaveMessage("");
     const token = await getFreshToken();
     if (!token) return;
 
-    const selectedEventIds = Object.keys(checkedEvents).filter(
-      (id) => checkedEvents[id]
-    );
+    const selectedEventIds = Object.keys(checkedEvents)
+      .filter((id) => checkedEvents[id])
+      .map(Number);
+
     const chartDataForQuery = events.filter((event) =>
-      selectedEventIds.includes(String(event.event_id))
+      selectedEventIds.includes(event.event_id)
     );
 
-    if (chartDataForQuery.length === 0) {
-      setIsLoading(false);
-      setError("Please select at least one event.");
-      return;
-    }
+    // Allow queries with or without events selected
+    // Empty array = general astrology questions
 
     const baseApiUrl = import.meta.env.VITE_API_URI;
+    const endpoint = viewMode === 'chat' ? '/chat' : '/query';
+
+    const requestBody = {
+      userId,
+      chartData: JSON.stringify(chartDataForQuery),
+      ...queryPayload,
+      ...(viewMode === 'chat' && {
+        sessionKey: currentSessionKey,
+        saveToHistory: saveMessages,
+      }),
+    };
+
     try {
-      const res = await fetch(`${baseApiUrl}/query`, {
+      const res = await fetch(`${baseApiUrl}${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `${token}`,
         },
-        body: JSON.stringify({
-          userId: userId,
-          chartData: JSON.stringify(chartDataForQuery),
-          ...queryPayload,
-        }),
+        body: JSON.stringify(requestBody),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `API Error: ${res.status}`);
-      setResponse(data.response);
+
+      if (viewMode === 'single') {
+        setResponse(data.response);
+      } else {
+        // Add to chat history immediately
+        const newMessage: ChatMessage = {
+          messageId: data.messageId || Date.now(),
+          userMessage: queryPayload.userQuestion,
+          assistantResponse: data.response,
+          eventIdsUsed: selectedEventIds,
+          createdAt: new Date().toISOString(),
+        };
+        setChatHistory((prev) => [...prev, newMessage]);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -923,6 +1154,8 @@ export default function App() {
         <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl shadow-indigo-900/50 overflow-hidden">
           <Header />
           <main>
+            <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+
             <AstrologyQueryForm
               onSubmit={handleAstrologyQuery}
               onSaveEvent={handleSaveEvent}
@@ -938,14 +1171,27 @@ export default function App() {
               saveMessage={saveMessage}
               progressedChecks={progressedChecks}
               onToggleProgressed={onToggleProgressed}
-              progressedTimezones={progressedTimezones} // ✅ Add this prop
-              onProgressedTimezoneChange={handleProgressedTimezoneChange} // ✅ Add this prop
+              progressedTimezones={progressedTimezones}
+              onProgressedTimezoneChange={handleProgressedTimezoneChange}
+              viewMode={viewMode}
+              saveMessages={saveMessages}
+              setSaveMessages={setSaveMessages}
             />
-            <ResponseDisplay
-              isLoading={isLoading}
-              response={response}
-              error={error}
-            />
+
+            {viewMode === 'single' ? (
+              <ResponseDisplay
+                isLoading={isLoading}
+                response={response}
+                error={error}
+              />
+            ) : (
+              <ChatHistoryDisplay
+                messages={chatHistory}
+                isLoading={isLoading}
+                error={error}
+                onClearSession={handleClearSession}
+              />
+            )}
           </main>
         </div>
       </div>
