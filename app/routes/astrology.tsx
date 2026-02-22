@@ -1147,8 +1147,7 @@ const ManualEntry = ({
   );
 };
 
-const AstrologyQueryForm = ({
-  onSubmit,
+const EventConfigSection = ({
   onSaveEvent,
   onUpdateEvent,
   onDeleteEvent,
@@ -1158,45 +1157,14 @@ const AstrologyQueryForm = ({
   checkedEvents,
   onToggleEvent,
   isLoading,
-  message,
   saveMessage,
   progressedChecks,
   onToggleProgressed,
   progressedTimezones,
   onProgressedTimezoneChange,
-  singleResponseMode,
-  setSingleResponseMode,
 }: any) => {
-  const [userQuestion, setUserQuestion] = useState("");
-  const [includeTransits, setIncludeTransits] = useState(true);
-  const [transitTimestamp, setTransitTimestamp] = useState(
-    DateTime.now().toFormat("yyyy-MM-dd'T'HH:mm")
-  );
-
-  const isAskDisabled = isLoading || !userQuestion.trim();
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const progressedEventIds = Object.keys(progressedChecks)
-      .filter((id) => progressedChecks[id])
-      .map(Number);
-
-    // ✅ MODIFIED: Add progressedTimezones to the payload
-    const queryPayload = {
-      userQuestion,
-      progressed: progressedEventIds.length > 0,
-      progressedEventIds,
-      progressedTimezones, // Add this line
-      transitTimestamp: includeTransits
-        ? DateTime.fromISO(transitTimestamp).toISO()
-        : null,
-    };
-
-    onSubmit(queryPayload);
-  };
-
   return (
-    <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
+    <div className="p-6 md:p-8 space-y-6 border-b border-gray-700">
       <AddEventForm
         onSave={onSaveEvent}
         onUpdate={onUpdateEvent}
@@ -1213,129 +1181,69 @@ const AstrologyQueryForm = ({
         onDelete={onDeleteEvent}
         progressedChecks={progressedChecks}
         onToggleProgressed={onToggleProgressed}
-        progressedTimezones={progressedTimezones} // ✅ Add this prop
-        onProgressedTimezoneChange={onProgressedTimezoneChange} // ✅ Add this prop
+        progressedTimezones={progressedTimezones}
+        onProgressedTimezoneChange={onProgressedTimezoneChange}
       />
-
-      <div>
-        <label
-          htmlFor="userQuestion"
-          className="block text-lg font-medium text-gray-200 mb-2"
-        >
-          Your Question
-        </label>
-        <input
-          id="userQuestion"
-          type="text"
-          value={userQuestion}
-          onChange={(e) => setUserQuestion(e.target.value)}
-          placeholder="e.g., What are the themes for the upcoming month?"
-          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg"
-          disabled={isLoading}
-          required
-        />
-      </div>
-
-      <TransitOptions
-        includeTransits={includeTransits}
-        setIncludeTransits={setIncludeTransits}
-        transitTimestamp={transitTimestamp}
-        setTransitTimestamp={setTransitTimestamp}
-      />
-
-      <label className="flex items-center space-x-2 text-sm text-gray-300">
-        <input
-          type="checkbox"
-          checked={singleResponseMode}
-          onChange={(e) => setSingleResponseMode(e.target.checked)}
-          className="rounded bg-gray-600 border-gray-500 text-indigo-500"
-        />
-        <span>Single response mode (don't save to chat history)</span>
-      </label>
-
-      {message && (
-        <div className="text-center text-red-400 bg-red-900/50 p-3 rounded-lg border border-red-500">
-          {message}
-        </div>
-      )}
-
-      <div className="text-center">
-        <button
-          type="submit"
-          className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 disabled:bg-gray-500 disabled:cursor-not-allowed transition-all"
-          disabled={isAskDisabled}
-        >
-          {isLoading ? "Thinking..." : "Ask"}
-        </button>
-        {isAskDisabled && !isLoading && (
-          <p className="text-xs text-gray-500 mt-2">
-            Please enter a question.
-          </p>
-        )}
-      </div>
-    </form>
-  );
-};
-
-const ResponseDisplay = ({ isLoading, response, error }) => {
-  const renderContent = () => {
-    if (isLoading)
-      return (
-        <>
-          <p>Results take about 1 minute to generate. Please be patient.</p>
-          <p>
-            Your questions are never stored on our servers because we value your
-            privacy.
-          </p>
-          <LoadingSpinner />
-        </>
-      );
-    if (error)
-      return (
-        <div className="text-red-400 bg-red-900/50 p-4 rounded-lg border border-red-500">
-          {error}
-        </div>
-      );
-    if (response) {
-      const formattedResponse = response.replace(/\n/g, "<br />");
-      return (
-        <div
-          className="text-gray-300 leading-relaxed prose prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: formattedResponse }}
-        />
-      );
-    }
-    return (
-      <div className="text-center text-gray-500 italic">
-        Enter a question above to see results here.
-      </div>
-    );
-  };
-
-  return (
-    <div className="p-6 md:p-8 bg-gray-800/50 rounded-b-xl min-h-[200px] flex flex-col justify-center">
-      <h2 className="text-2xl font-semibold text-white mb-4 border-b border-gray-600 pb-2">
-        Results
-      </h2>
-      <div className="mt-4">{renderContent()}</div>
     </div>
   );
 };
 
-const ChatHistoryDisplay = ({ messages, isLoading, error, onClearSession }) => {
+
+const ChatInterface = ({
+  messages,
+  isLoading,
+  error,
+  onClearSession,
+  onSubmit,
+  singleResponseMode,
+  setSingleResponseMode,
+  response,
+  progressedChecks,
+  progressedTimezones,
+}: any) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [userQuestion, setUserQuestion] = useState("");
+  const [includeTransits, setIncludeTransits] = useState(true);
+  const [transitTimestamp, setTransitTimestamp] = useState(
+    DateTime.now().toFormat("yyyy-MM-dd'T'HH:mm")
+  );
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, response]);
+
+  const isAskDisabled = isLoading || !userQuestion.trim();
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const progressedEventIds = Object.keys(progressedChecks)
+      .filter((id) => progressedChecks[id])
+      .map(Number);
+
+    const queryPayload = {
+      userQuestion,
+      progressed: progressedEventIds.length > 0,
+      progressedEventIds,
+      progressedTimezones,
+      transitTimestamp: includeTransits
+        ? DateTime.fromISO(transitTimestamp).toISO()
+        : null,
+    };
+
+    onSubmit(queryPayload);
+    setUserQuestion(""); // Clear input after sending
+  };
 
   return (
-    <div className="p-6 md:p-8 bg-gray-800/50 rounded-b-xl min-h-[400px] max-h-[600px] flex flex-col">
+    <div className="p-6 md:p-8 bg-gray-800/50 flex flex-col" style={{ minHeight: '500px' }}>
+      {/* Header */}
       <div className="flex justify-between items-center mb-4 border-b border-gray-600 pb-2">
-        <h2 className="text-2xl font-semibold text-white">Chat History</h2>
-        {messages.length > 0 && (
+        <h2 className="text-2xl font-semibold text-white">
+          {singleResponseMode ? "Response" : "Chat History"}
+        </h2>
+        {!singleResponseMode && messages.length > 0 && (
           <button
             onClick={onClearSession}
             className="text-sm text-red-400 hover:text-red-300"
@@ -1345,43 +1253,69 @@ const ChatHistoryDisplay = ({ messages, isLoading, error, onClearSession }) => {
         )}
       </div>
 
+      {/* Chat messages / Single response */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto space-y-4 pr-2"
+        className="flex-1 overflow-y-auto space-y-4 pr-2 mb-4"
+        style={{ maxHeight: '400px' }}
       >
-        {messages.length === 0 && !isLoading && (
-          <div className="text-center text-gray-500 italic mt-8">
-            No messages yet. Ask a question to start your chat!
-          </div>
-        )}
-
-        {messages.map((msg) => (
-          <div key={msg.messageId} className="space-y-2">
-            {/* User message */}
-            <div className="flex justify-end">
-              <div className="bg-indigo-600 text-white rounded-lg px-4 py-2 max-w-[80%]">
-                {msg.userMessage}
+        {singleResponseMode ? (
+          // Single response mode
+          <>
+            {!response && !isLoading && (
+              <div className="text-center text-gray-500 italic mt-8">
+                Enter a question below to see results here.
               </div>
-            </div>
-
-            {/* Assistant response */}
-            <div className="flex justify-start">
-              <div className="bg-gray-700 text-gray-200 rounded-lg px-4 py-3 max-w-[80%]">
+            )}
+            {response && (
+              <div className="bg-gray-700 text-gray-200 rounded-lg px-4 py-3">
                 <div
                   className="prose prose-invert prose-sm max-w-none"
                   dangerouslySetInnerHTML={{
-                    __html: msg.assistantResponse.replace(/\n/g, '<br />')
+                    __html: response.replace(/\n/g, '<br />')
                   }}
                 />
               </div>
-            </div>
+            )}
+          </>
+        ) : (
+          // Chat history mode
+          <>
+            {messages.length === 0 && !isLoading && (
+              <div className="text-center text-gray-500 italic mt-8">
+                No messages yet. Ask a question to start your chat!
+              </div>
+            )}
 
-            {/* Timestamp */}
-            <div className="text-xs text-gray-500 text-right">
-              {new Date(msg.createdAt).toLocaleString()}
-            </div>
-          </div>
-        ))}
+            {messages.map((msg) => (
+              <div key={msg.messageId} className="space-y-2">
+                {/* User message */}
+                <div className="flex justify-end">
+                  <div className="bg-indigo-600 text-white rounded-lg px-4 py-2 max-w-[80%]">
+                    {msg.userMessage}
+                  </div>
+                </div>
+
+                {/* Assistant response */}
+                <div className="flex justify-start">
+                  <div className="bg-gray-700 text-gray-200 rounded-lg px-4 py-3 max-w-[80%]">
+                    <div
+                      className="prose prose-invert prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{
+                        __html: msg.assistantResponse.replace(/\n/g, '<br />')
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Timestamp */}
+                <div className="text-xs text-gray-500 text-right">
+                  {new Date(msg.createdAt).toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
 
         {isLoading && (
           <div className="flex justify-start">
@@ -1393,10 +1327,63 @@ const ChatHistoryDisplay = ({ messages, isLoading, error, onClearSession }) => {
       </div>
 
       {error && (
-        <div className="mt-4 text-red-400 bg-red-900/50 p-3 rounded-lg border border-red-500">
+        <div className="mb-4 text-red-400 bg-red-900/50 p-3 rounded-lg border border-red-500">
           {error}
         </div>
       )}
+
+      {/* Question input form */}
+      <form onSubmit={handleSubmit} className="space-y-3 border-t border-gray-700 pt-4">
+        <div className="flex items-center gap-2">
+          <input
+            id="userQuestion"
+            type="text"
+            value={userQuestion}
+            onChange={(e) => setUserQuestion(e.target.value)}
+            placeholder="Ask a question..."
+            className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            disabled={isLoading}
+          />
+          <button
+            type="submit"
+            className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 disabled:bg-gray-500 disabled:cursor-not-allowed transition-all"
+            disabled={isAskDisabled}
+          >
+            {isLoading ? "..." : "Send"}
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between text-sm">
+          <label className="flex items-center space-x-2 text-gray-300">
+            <input
+              type="checkbox"
+              checked={singleResponseMode}
+              onChange={(e) => setSingleResponseMode(e.target.checked)}
+              className="rounded bg-gray-600 border-gray-500 text-indigo-500"
+            />
+            <span>Single response mode</span>
+          </label>
+
+          <label className="flex items-center space-x-2 text-gray-300">
+            <input
+              type="checkbox"
+              checked={includeTransits}
+              onChange={(e) => setIncludeTransits(e.target.checked)}
+              className="rounded bg-gray-600 border-gray-500 text-indigo-500"
+            />
+            <span>Include transits</span>
+          </label>
+
+          {includeTransits && (
+            <input
+              type="datetime-local"
+              value={transitTimestamp}
+              onChange={(e) => setTransitTimestamp(e.target.value)}
+              className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white"
+            />
+          )}
+        </div>
+      </form>
     </div>
   );
 };
@@ -1764,42 +1751,36 @@ export default function App() {
           <main>
             {activeTab === 'chat' ? (
               <>
-                {/* Chat History / Response Display at Top */}
-                {singleResponseMode ? (
-                  <ResponseDisplay
-                    isLoading={isLoading}
-                    response={response}
-                    error={error}
-                  />
-                ) : (
-                  <ChatHistoryDisplay
-                    messages={chatHistory}
-                    isLoading={isLoading}
-                    error={error}
-                    onClearSession={handleClearSession}
-                  />
-                )}
-
-                {/* Input Form at Bottom */}
-                <AstrologyQueryForm
-                  onSubmit={handleAstrologyQuery}
+                {/* Event Configuration at Top */}
+                <EventConfigSection
                   onSaveEvent={handleSaveEvent}
                   onUpdateEvent={handleUpdateEvent}
                   onDeleteEvent={handleDeleteEvent}
-                  editingEvent={editingEvent}
                   setEditingEvent={setEditingEvent}
+                  editingEvent={editingEvent}
                   events={events}
                   checkedEvents={checkedEvents}
                   onToggleEvent={onToggleEvent}
                   isLoading={isLoading}
-                  message={error}
                   saveMessage={saveMessage}
                   progressedChecks={progressedChecks}
                   onToggleProgressed={onToggleProgressed}
                   progressedTimezones={progressedTimezones}
                   onProgressedTimezoneChange={handleProgressedTimezoneChange}
+                />
+
+                {/* Chat Interface with Input at Bottom */}
+                <ChatInterface
+                  messages={chatHistory}
+                  isLoading={isLoading}
+                  error={error}
+                  onClearSession={handleClearSession}
+                  onSubmit={handleAstrologyQuery}
                   singleResponseMode={singleResponseMode}
                   setSingleResponseMode={setSingleResponseMode}
+                  response={response}
+                  progressedChecks={progressedChecks}
+                  progressedTimezones={progressedTimezones}
                 />
               </>
             ) : (
