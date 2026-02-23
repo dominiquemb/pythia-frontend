@@ -1802,7 +1802,18 @@ export default function App() {
         await unlockWithPassphrase(passphrase);
       } else {
         const initialized = await initializeWithPassphrase(passphrase);
-        window.alert(`Save this recovery key securely:\n\n${initialized.recoveryKey}`);
+        try {
+          await navigator.clipboard.writeText(initialized.recoveryKey);
+          window.prompt(
+            "Recovery key copied. Save this key securely:",
+            initialized.recoveryKey
+          );
+        } catch {
+          window.prompt(
+            "Copy and save this recovery key securely:",
+            initialized.recoveryKey
+          );
+        }
       }
       return true;
     } catch (err) {
