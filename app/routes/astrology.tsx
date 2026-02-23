@@ -1994,17 +1994,15 @@ export default function App() {
         return;
       }
 
-      const formattedHistoryContext = historyContextForRequest
+      const historyBlocks = historyContextForRequest
         .slice(-12)
         .map(
-          (entry, idx) =>
-            `Turn ${idx + 1}\nUser: ${entry.userMessage}\nAssistant: ${entry.assistantResponse}`
-        )
-        .join("\n\n");
+          (entry) =>
+            `User: ${entry.userMessage}\nYour reply: ${entry.assistantResponse}`
+        );
 
-      const finalUserMessageForModel = formattedHistoryContext
-        ? `Context (recent chat history):\n${formattedHistoryContext}\n\nUser message:\n${queryPayload.userQuestion}`
-        : queryPayload.userQuestion;
+      const allContextBlocks = [...historyBlocks, `User: ${queryPayload.userQuestion}`];
+      const finalUserMessageForModel = `Context:\n${allContextBlocks.join("\n----\n")}`;
 
       const requestBody = {
         userId,
