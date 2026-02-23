@@ -12,19 +12,12 @@ export default function Login() {
   // ✅ STEP 1: Create state to hold the dynamically imported component
   // We initialize it to null. We use 'any' for simplicity here.
   const [AuthComponent, setAuthComponent] = useState<any>(null);
-  const [debugInfo, setDebugInfo] = useState<string>('');
 
   // Check for password recovery in URL hash
   useEffect(() => {
-    const fullUrl = window.location.href;
     const hash = window.location.hash;
 
-    const debugMessage = `URL: ${fullUrl}\nHash: ${hash}\nIncludes recovery? ${hash.includes('type=recovery')}`;
-    setDebugInfo(debugMessage);
-    console.log('[Login] Full URL hash:', hash);
-
     if (hash && hash.includes('type=recovery')) {
-      console.log('[Login] Password recovery detected! Redirecting to /reset-password');
       navigate('/reset-password', { replace: true });
     }
   }, [navigate]);
@@ -62,20 +55,6 @@ export default function Login() {
   // Once AuthComponent is loaded, render it
   return (
     <div className="flex justify-center items-center h-screen bg-gray-100">
-      {/* Debug Banner */}
-      {debugInfo && (
-        <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black p-4 z-50 font-mono text-xs whitespace-pre-wrap">
-          <strong>DEBUG INFO (Login Page):</strong><br/>
-          {debugInfo}
-          <button
-            onClick={() => setDebugInfo('')}
-            className="ml-4 px-2 py-1 bg-black text-white rounded"
-          >
-            Close
-          </button>
-        </div>
-      )}
-
       <div className="w-96 p-8 bg-white rounded-lg shadow-md">
         <AuthComponent
           supabaseClient={supabase}

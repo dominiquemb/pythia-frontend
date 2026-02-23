@@ -374,17 +374,18 @@ const ChartWheel = ({
                 <circle
                   cx={point.x}
                   cy={point.y}
-                  r="8"
+                  r="10"
                   fill={getPlanetColor(name)}
                   stroke="#ffffff"
                   strokeWidth="1"
                 />
                 <text
                   x={point.x}
-                  y={point.y + 25}
-                  fontSize="12"
+                  y={point.y + 30}
+                  fontSize="20"
                   fill="#ffffff"
                   textAnchor="middle"
+                  fontWeight="bold"
                 >
                   {getPlanetSymbol(name)}
                 </text>
@@ -423,18 +424,14 @@ const ChartWheel = ({
 };
 
 const DateSlider = ({
-  value,
+  year,
   onChange,
-  rangeType,
-  onRangeChange,
 }: {
-  value: number;
-  onChange: (value: number) => void;
-  rangeType: "hour" | "day" | "month" | "year";
-  onRangeChange: (type: "hour" | "day" | "month" | "year") => void;
+  year: number;
+  onChange: (year: number) => void;
 }) => {
-  const min = -100;
-  const max = 100;
+  const min = -13000;
+  const max = 17000;
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = parseInt(e.target.value);
@@ -445,39 +442,23 @@ const DateSlider = ({
     <div className="mt-6 space-y-4">
       <div className="flex items-center justify-between">
         <label className="text-lg font-medium text-gray-200">
-          Navigate Through Time
+          Year: {year < 0 ? `${Math.abs(year)} BC` : `${year} AD`}
         </label>
-
-        <div className="flex gap-2">
-          {(["hour", "day", "month", "year"] as const).map((type) => (
-            <button
-              key={type}
-              onClick={() => onRangeChange(type)}
-              className={`px-3 py-1 rounded text-sm transition ${
-                rangeType === type
-                  ? "bg-indigo-600 text-white"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-              }`}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
       </div>
 
       <input
         type="range"
         min={min}
         max={max}
-        value={value}
+        value={year}
         onChange={handleSliderChange}
         className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
       />
 
       <div className="flex justify-between text-xs text-gray-500">
-        <span>-100 {rangeType}s</span>
-        <span>Now</span>
-        <span>+100 {rangeType}s</span>
+        <span>13000 BC</span>
+        <span>Now ({DateTime.now().year} AD)</span>
+        <span>17000 AD</span>
       </div>
     </div>
   );
@@ -630,32 +611,14 @@ const ChartViewerTab = ({
   const [chartData, setChartData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [sliderValue, setSliderValue] = useState<number>(0);
-  const [sliderRangeType, setSliderRangeType] = useState<
-    "hour" | "day" | "month" | "year"
-  >("day");
+  const [selectedYear, setSelectedYear] = useState<number>(DateTime.now().year);
 
-  useEffect(() => {
-    const baseDate = DateTime.now();
-    let newDate: DateTime;
-
-    switch (sliderRangeType) {
-      case "hour":
-        newDate = baseDate.plus({ hours: sliderValue });
-        break;
-      case "day":
-        newDate = baseDate.plus({ days: sliderValue });
-        break;
-      case "month":
-        newDate = baseDate.plus({ months: sliderValue });
-        break;
-      case "year":
-        newDate = baseDate.plus({ years: sliderValue });
-        break;
-    }
-
-    setCurrentDate(newDate);
-  }, [sliderValue, sliderRangeType]);
+  // Update date when slider year changes
+  const handleYearChange = (year: number) => {
+    setSelectedYear(year);
+    // Keep current month, day, hour, minute but change the year
+    setCurrentDate(currentDate.set({ year }));
+  };
 
   useEffect(() => {
     if (!userId) return;
@@ -724,10 +687,8 @@ const ChartViewerTab = ({
       <ChartWheel chartData={chartData} isLoading={isLoading} />
 
       <DateSlider
-        value={sliderValue}
-        onChange={setSliderValue}
-        rangeType={sliderRangeType}
-        onRangeChange={setSliderRangeType}
+        year={selectedYear}
+        onChange={handleYearChange}
       />
 
       <DateInput date={currentDate} onChange={setCurrentDate} />
