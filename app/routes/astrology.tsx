@@ -1939,6 +1939,7 @@ export default function App() {
             body: JSON.stringify({
               userId,
               conversationId: resultingConversationId || currentConversationId,
+              conversationTitle: queryPayload.userQuestion,
               userMessageEncrypted: encryptedUser.ciphertext,
               assistantResponseEncrypted: encryptedAssistant.ciphertext,
               encryptionIVUser: encryptedUser.iv,
