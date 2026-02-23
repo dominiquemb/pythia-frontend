@@ -1317,6 +1317,10 @@ const ChatInterface = ({
         </div>
       )}
 
+      <p className="mb-3 text-xs text-gray-400">
+        Responses may take a minute to generate.
+      </p>
+
       {/* Chat messages / Single response */}
       <div
         ref={scrollRef}
