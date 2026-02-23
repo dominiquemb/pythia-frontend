@@ -1600,6 +1600,27 @@ export default function App() {
       const data = await res.json();
       const loadedMessages = data.messages || [];
 
+      // Restore selected event/chart context for this conversation from the latest message
+      // that carries event IDs.
+      const latestWithEventIds = [...loadedMessages]
+        .reverse()
+        .find(
+          (msg: ChatMessage) =>
+            Array.isArray(msg.eventIdsUsed) && msg.eventIdsUsed.length > 0
+        );
+      if (latestWithEventIds) {
+        const restoredCheckedEvents = (latestWithEventIds.eventIdsUsed || []).reduce(
+          (acc: Record<number, boolean>, eventId: number) => {
+            acc[eventId] = true;
+            return acc;
+          },
+          {}
+        );
+        setCheckedEvents(restoredCheckedEvents);
+      } else {
+        setCheckedEvents({});
+      }
+
       if (encryptionEnabled && encryptionStatus === "unlocked") {
         const decryptedMessages = await Promise.all(
           loadedMessages.map(async (msg: ChatMessage) => {
