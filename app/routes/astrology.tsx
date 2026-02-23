@@ -1283,19 +1283,7 @@ const ChatInterface = ({
       </div>
 
       {!singleResponseMode && (
-        <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-          <select
-            value={currentConversationId ?? ""}
-            onChange={(e) => onSelectConversation(Number(e.target.value))}
-            className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-          >
-            <option value="">New Chat</option>
-            {conversations.map((session) => (
-              <option key={session.conversationId} value={session.conversationId}>
-                {session.title || `Chat ${session.conversationId}`}
-              </option>
-            ))}
-          </select>
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-gray-300">
             <input
               type="checkbox"
@@ -1321,6 +1309,38 @@ const ChatInterface = ({
         Responses may take a minute to generate.
       </p>
 
+      <div className={`${!singleResponseMode ? "grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4" : ""} flex-1 min-h-0`}>
+        {!singleResponseMode && (
+          <aside className="bg-gray-900/50 border border-gray-700 rounded-lg p-2 overflow-y-auto max-h-[520px]">
+            <button
+              type="button"
+              onClick={onNewConversation}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm mb-2 ${
+                currentConversationId === null
+                  ? "bg-indigo-600 text-white"
+                  : "bg-gray-800 text-gray-200 hover:bg-gray-700"
+              }`}
+            >
+              New Chat
+            </button>
+            {conversations.map((session) => (
+              <button
+                key={session.conversationId}
+                type="button"
+                onClick={() => onSelectConversation(session.conversationId)}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm mb-2 ${
+                  currentConversationId === session.conversationId
+                    ? "bg-indigo-600 text-white"
+                    : "bg-gray-800 text-gray-200 hover:bg-gray-700"
+                }`}
+              >
+                {session.title || `Chat ${session.conversationId}`}
+              </button>
+            ))}
+          </aside>
+        )}
+
+        <div className="min-h-0 flex flex-col">
       {/* Chat messages / Single response */}
       <div
         ref={scrollRef}
@@ -1421,7 +1441,7 @@ const ChatInterface = ({
           </button>
         </div>
 
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
           <label className="flex items-center space-x-2 text-gray-300">
             <input
               type="checkbox"
@@ -1432,26 +1452,29 @@ const ChatInterface = ({
             <span>Single response mode</span>
           </label>
 
-          <label className="flex items-center space-x-2 text-gray-300">
-            <input
-              type="checkbox"
-              checked={includeTransits}
-              onChange={(e) => setIncludeTransits(e.target.checked)}
-              className="rounded bg-gray-600 border-gray-500 text-indigo-500"
-            />
-            <span>Include transits</span>
-          </label>
-
-          {includeTransits && (
-            <input
-              type="datetime-local"
-              value={transitTimestamp}
-              onChange={(e) => setTransitTimestamp(e.target.value)}
-              className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white"
-            />
-          )}
+          <div className="flex items-center gap-2 text-gray-300">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={includeTransits}
+                onChange={(e) => setIncludeTransits(e.target.checked)}
+                className="rounded bg-gray-600 border-gray-500 text-indigo-500"
+              />
+              <span>Include transits</span>
+            </label>
+            {includeTransits && (
+              <input
+                type="datetime-local"
+                value={transitTimestamp}
+                onChange={(e) => setTransitTimestamp(e.target.value)}
+                className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white"
+              />
+            )}
+          </div>
         </div>
       </form>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1509,6 +1532,19 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [saveMessage]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const stored = localStorage.getItem(`pythia:encrypt:${userId}`);
+    if (stored !== null) {
+      setEncryptionEnabled(stored === "true");
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    localStorage.setItem(`pythia:encrypt:${userId}`, String(encryptionEnabled));
+  }, [userId, encryptionEnabled]);
 
   useEffect(() => {
     if (!singleResponseMode && currentConversationId) {
@@ -1902,7 +1938,7 @@ export default function App() {
             },
             body: JSON.stringify({
               userId,
-              conversationId: currentConversationId,
+              conversationId: resultingConversationId || currentConversationId,
               userMessageEncrypted: encryptedUser.ciphertext,
               assistantResponseEncrypted: encryptedAssistant.ciphertext,
               encryptionIVUser: encryptedUser.iv,
