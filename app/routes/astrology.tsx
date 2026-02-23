@@ -1665,7 +1665,11 @@ export default function App() {
     const requestBody = {
       userId,
       chartData: JSON.stringify(chartDataForQuery),
-      ...queryPayload,
+      userMessage: queryPayload.userQuestion, // API expects userMessage, not userQuestion
+      progressed: queryPayload.progressed,
+      progressedEventIds: queryPayload.progressedEventIds,
+      progressedTimezones: queryPayload.progressedTimezones,
+      transitTimestamp: queryPayload.transitTimestamp,
       ...(!singleResponseMode && {
         sessionKey: currentSessionKey,
         saveToHistory: true,
