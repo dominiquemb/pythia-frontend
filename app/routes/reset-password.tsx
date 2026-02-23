@@ -24,27 +24,35 @@ export default function ResetPassword() {
       const refreshToken = hashParams.get('refresh_token');
       const type = hashParams.get('type');
 
+      let debugMessage = `URL: ${fullUrl}\nHash: ${hash}\naccess_token: ${accessToken ? 'present' : 'missing'}\nrefresh_token: ${refreshToken ? 'present' : 'missing'}\ntype: ${type}`;
+
       // If we have tokens in the URL, set the session manually
       if (accessToken && type === 'recovery') {
         console.log('[ResetPassword] Found recovery tokens in URL, setting session...');
+        debugMessage += '\n\nAttempting to set session...';
+        setDebugInfo(debugMessage);
 
         try {
           // Manually set the session using the tokens from the URL
           const { data, error: authError } = await supabase.auth.setSession({
             access_token: accessToken,
-            refresh_token: refreshToken || accessToken, // Use access token as fallback
+            refresh_token: refreshToken || '',
           });
 
           if (authError) {
             console.error('[ResetPassword] Auth error:', authError);
-            setError("Failed to validate reset link. Please try again.");
-            setDebugInfo(`Error: ${authError.message}`);
+            debugMessage += `\n\nERROR: ${authError.message}`;
+            setDebugInfo(debugMessage);
+            setError("Failed to validate reset link: " + authError.message);
             return;
           }
 
+          debugMessage += '\n\nSession set successfully!';
           console.log('[ResetPassword] Session set successfully:', data.session);
         } catch (err: any) {
           console.error('[ResetPassword] Exception:', err);
+          debugMessage += `\n\nEXCEPTION: ${err.message}`;
+          setDebugInfo(debugMessage);
           setError(err.message);
           return;
         }
@@ -52,13 +60,15 @@ export default function ResetPassword() {
 
       const { data: { session } } = await supabase.auth.getSession();
 
-      const debugMessage = `URL: ${fullUrl}\nHash: ${hash}\nHas Session? ${!!session}\nSession Type: ${session?.user?.aud || 'none'}`;
+      debugMessage += `\n\nFinal Session Check:\nHas Session? ${!!session}\nSession Type: ${session?.user?.aud || 'none'}\nValid: ${!!session}`;
       setDebugInfo(debugMessage);
 
       // Supabase sets a recovery session when user clicks reset link
       if (session) {
+        console.log('[ResetPassword] Valid session found, showing form');
         setIsValidSession(true);
       } else {
+        console.log('[ResetPassword] No valid session');
         setError("Invalid or expired reset link. Please request a new password reset.");
       }
     };
