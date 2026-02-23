@@ -106,7 +106,8 @@ const getPlanetColor = (name: string): string => {
 };
 
 const longitudeToAngle = (longitude: number): number => {
-  return 180 - longitude;
+  // Rotate chart so Capricorn (270°) is at top (90° in SVG)
+  return 360 - longitude;
 };
 
 const getPointOnCircle = (
@@ -219,7 +220,8 @@ const ZodiacRing = ({
   return (
     <g>
       {zodiacSigns.map((sign, index) => {
-        const startAngle = 180 - index * 30;
+        // Rotate chart so Capricorn (index 9, 270°) is at top
+        const startAngle = 360 - index * 30;
         const endAngle = startAngle - 30;
         const midAngle = startAngle - 15;
 

@@ -19,12 +19,18 @@ type Pages = {
   "/login": {
     params: {};
   };
+  "/chart-viewer": {
+    params: {};
+  };
+  "/reset-password": {
+    params: {};
+  };
 };
 
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/home" | "/login";
+    page: "/" | "/home" | "/login" | "/chart-viewer" | "/reset-password";
   };
   "./routes/home.tsx": {
     id: "routes/home";
@@ -36,10 +42,18 @@ type RouteFiles = {
   };
   "./protectedRoute/protectedRoute.tsx": {
     id: "protectedRoute/protectedRoute";
-    page: "/";
+    page: "/" | "/chart-viewer" | "/reset-password";
   };
   "./routes/astrology.tsx": {
     id: "routes/astrology";
     page: "/";
+  };
+  "./routes/chart-viewer.tsx": {
+    id: "routes/chart-viewer";
+    page: "/chart-viewer";
+  };
+  "./routes/reset-password.tsx": {
+    id: "routes/reset-password";
+    page: "/reset-password";
   };
 };
