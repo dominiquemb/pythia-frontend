@@ -11,11 +11,16 @@ export function AuthRedirector() {
 
   useEffect(() => {
     // Check for password recovery in URL hash
-    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const hash = window.location.hash;
+    console.log('[AuthRedirector] Full URL:', window.location.href);
+    console.log('[AuthRedirector] Full hash:', hash);
+
+    const hashParams = new URLSearchParams(hash.substring(1));
     const type = hashParams.get('type');
+    console.log('[AuthRedirector] Extracted type:', type);
 
     if (type === 'recovery') {
-      console.log('AuthRedirector: Password recovery detected, redirecting to /reset-password');
+      console.log('[AuthRedirector] Password recovery detected! Redirecting to /reset-password');
       navigate('/reset-password', { replace: true });
       return;
     }

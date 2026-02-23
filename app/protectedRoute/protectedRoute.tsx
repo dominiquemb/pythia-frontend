@@ -25,11 +25,16 @@ export const SessionProvider = ({
 
   useEffect(() => {
     // Check for password recovery in URL hash
-    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const hash = window.location.hash;
+    console.log('[SessionProvider] Full URL:', window.location.href);
+    console.log('[SessionProvider] Full hash:', hash);
+
+    const hashParams = new URLSearchParams(hash.substring(1));
     const type = hashParams.get('type');
+    console.log('[SessionProvider] Extracted type:', type);
 
     if (type === 'recovery') {
-      console.log('[SessionProvider] Password recovery detected, redirecting to /reset-password');
+      console.log('[SessionProvider] Password recovery detected! Redirecting to /reset-password');
       navigate('/reset-password', { replace: true });
     }
 

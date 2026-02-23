@@ -13,6 +13,17 @@ export default function Login() {
   // We initialize it to null. We use 'any' for simplicity here.
   const [AuthComponent, setAuthComponent] = useState<any>(null);
 
+  // Check for password recovery in URL hash
+  useEffect(() => {
+    const hash = window.location.hash;
+    console.log('[Login] Full URL hash:', hash);
+
+    if (hash && hash.includes('type=recovery')) {
+      console.log('[Login] Password recovery detected! Redirecting to /reset-password');
+      navigate('/reset-password', { replace: true });
+    }
+  }, [navigate]);
+
   // ✅ STEP 2: Use useEffect to dynamically import the Auth component on the client
   useEffect(() => {
     // The import() function returns a Promise

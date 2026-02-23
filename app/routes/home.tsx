@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom"; // Add router hook
 
 // --- Helper & Icon Components ---
@@ -14,6 +14,17 @@ const Header = () => (
 
 export default function App() {
   const navigate = useNavigate();
+
+  // Check for password recovery in URL hash
+  useEffect(() => {
+    const hash = window.location.hash;
+    console.log('[Home] Full URL hash:', hash);
+
+    if (hash && hash.includes('type=recovery')) {
+      console.log('[Home] Password recovery detected! Redirecting to /reset-password');
+      navigate('/reset-password', { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <div className="bg-gray-900 min-h-screen font-sans text-white relative">
