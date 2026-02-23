@@ -10,6 +10,16 @@ export function AuthRedirector() {
   const { pathname } = useLocation();
 
   useEffect(() => {
+    // Check for password recovery in URL hash
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const type = hashParams.get('type');
+
+    if (type === 'recovery') {
+      console.log('AuthRedirector: Password recovery detected, redirecting to /reset-password');
+      navigate('/reset-password', { replace: true });
+      return;
+    }
+
     // This logging logic is still helpful for debugging
     console.log("AuthRedirector: Checking state...", {
       isLoading: loading,

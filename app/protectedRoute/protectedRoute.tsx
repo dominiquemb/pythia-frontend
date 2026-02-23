@@ -24,6 +24,15 @@ export const SessionProvider = ({
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Check for password recovery in URL hash
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const type = hashParams.get('type');
+
+    if (type === 'recovery') {
+      console.log('[SessionProvider] Password recovery detected, redirecting to /reset-password');
+      navigate('/reset-password', { replace: true });
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
@@ -38,7 +47,7 @@ export const SessionProvider = ({
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [navigate]);
 
   // ✅ Redirect to /login when not authenticated
   useEffect(() => {
