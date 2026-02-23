@@ -83,6 +83,32 @@ export const EncryptionProvider = ({ children }: { children: React.ReactNode }) 
     return session.access_token;
   };
 
+  const resolveActiveUserId = async (): Promise<string> => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session?.user?.id) {
+      if (userId !== session.user.id) {
+        setUserId(session.user.id);
+      }
+      return session.user.id;
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user?.id) {
+      throw new Error("No active user");
+    }
+
+    if (userId !== user.id) {
+      setUserId(user.id);
+    }
+    return user.id;
+  };
+
   const fetchKeyMaterial = async (currentUserId: string) => {
     const token = await getFreshToken();
     const res = await fetch(`${baseApiUrl}/crypto/keys/${currentUserId}`, {
@@ -128,7 +154,7 @@ export const EncryptionProvider = ({ children }: { children: React.ReactNode }) 
   }, [userId]);
 
   const initializeWithPassphrase = async (passphrase: string) => {
-    if (!userId) throw new Error("No active user");
+    const currentUserId = await resolveActiveUserId();
     if (!passphrase?.trim()) throw new Error("Passphrase is required");
 
     const token = await getFreshToken();
@@ -152,7 +178,7 @@ export const EncryptionProvider = ({ children }: { children: React.ReactNode }) 
         Authorization: `${token}`,
       },
       body: JSON.stringify({
-        userId,
+        userId: currentUserId,
         encryptedMasterKey: encryptedMaster.encryptedKey,
         keyDerivationSalt: saltBase64,
         masterKeyIV: encryptedMaster.iv,
@@ -180,10 +206,10 @@ export const EncryptionProvider = ({ children }: { children: React.ReactNode }) 
   };
 
   const unlockWithPassphrase = async (passphrase: string) => {
-    if (!userId) throw new Error("No active user");
+    const currentUserId = await resolveActiveUserId();
     if (!passphrase?.trim()) throw new Error("Passphrase is required");
 
-    const material = serverKeyMaterial || (await fetchKeyMaterial(userId));
+    const material = serverKeyMaterial || (await fetchKeyMaterial(currentUserId));
     if (!material) {
       throw new Error("Encryption keys are not configured for this user");
     }
