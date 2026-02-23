@@ -430,7 +430,7 @@ const DateSlider = ({
   year: number;
   onChange: (year: number) => void;
 }) => {
-  const min = -13000;
+  const min = -1300;
   const max = 17000;
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -456,7 +456,7 @@ const DateSlider = ({
       />
 
       <div className="flex justify-between text-xs text-gray-500">
-        <span>13000 BC</span>
+        <span>1300 BC</span>
         <span>Now ({DateTime.now().year} AD)</span>
         <span>17000 AD</span>
       </div>
@@ -471,7 +471,8 @@ const DateInput = ({
   date: DateTime;
   onChange: (date: DateTime) => void;
 }) => {
-  const [year, setYear] = useState(date.year);
+  const [yearAbs, setYearAbs] = useState(Math.abs(date.year));
+  const [era, setEra] = useState<'AD' | 'BC'>(date.year < 0 ? 'BC' : 'AD');
   const [month, setMonth] = useState(date.month);
   const [day, setDay] = useState(date.day);
   const [hour, setHour] = useState(date.hour);
@@ -479,7 +480,9 @@ const DateInput = ({
 
   const handleDateChange = () => {
     try {
-      const newDate = DateTime.fromObject({ year, month, day, hour, minute });
+      // Convert BC/AD to actual year value (BC is negative)
+      const actualYear = era === 'BC' ? -yearAbs : yearAbs;
+      const newDate = DateTime.fromObject({ year: actualYear, month, day, hour, minute });
       if (newDate.isValid) {
         onChange(newDate);
       }
@@ -489,7 +492,8 @@ const DateInput = ({
   };
 
   useEffect(() => {
-    setYear(date.year);
+    setYearAbs(Math.abs(date.year));
+    setEra(date.year < 0 ? 'BC' : 'AD');
     setMonth(date.month);
     setDay(date.day);
     setHour(date.hour);
@@ -502,17 +506,28 @@ const DateInput = ({
         Manual Date Entry
       </label>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <input
           type="number"
           placeholder="Year"
-          value={year}
-          onChange={(e) => setYear(parseInt(e.target.value) || 0)}
+          value={yearAbs}
+          onChange={(e) => setYearAbs(parseInt(e.target.value) || 1)}
           onBlur={handleDateChange}
-          min={-13000}
+          min={1}
           max={17000}
           className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
         />
+        <select
+          value={era}
+          onChange={(e) => {
+            setEra(e.target.value as 'AD' | 'BC');
+            setTimeout(handleDateChange, 0);
+          }}
+          className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+        >
+          <option value="AD">AD</option>
+          <option value="BC">BC</option>
+        </select>
         <input
           type="number"
           placeholder="Month"
@@ -556,7 +571,7 @@ const DateInput = ({
       </div>
 
       <p className="mt-2 text-sm text-gray-400">
-        Date range: 13000 BC to 17000 AD (Swiss Ephemeris)
+        Date range: 1300 BC to 17000 AD (Swiss Ephemeris)
       </p>
     </div>
   );
