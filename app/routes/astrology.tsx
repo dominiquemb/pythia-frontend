@@ -121,8 +121,9 @@ const getPlanetColor = (name: string): string => {
 };
 
 const longitudeToAngle = (longitude: number): number => {
-  // Rotate chart so Capricorn (270°) is at top (90° in SVG)
-  return 360 - longitude;
+  // Astrological charts start at Aries (0°) at the left (180° in SVG).
+  // SVG angles increase clockwise while zodiac longitude increases counter-clockwise.
+  return 180 - longitude;
 };
 
 const getPointOnCircle = (
@@ -235,8 +236,7 @@ const ZodiacRing = ({
   return (
     <g>
       {zodiacSigns.map((sign, index) => {
-        // Rotate chart so Capricorn (index 9, 270°) is at top
-        const startAngle = 360 - index * 30;
+        const startAngle = 180 - index * 30;
         const endAngle = startAngle - 30;
         const midAngle = startAngle - 15;
 
@@ -441,14 +441,14 @@ const ChartWheel = ({
 };
 
 const DateSlider = ({
-  year,
+  dayOffset,
   onChange,
 }: {
-  year: number;
-  onChange: (year: number) => void;
+  dayOffset: number;
+  onChange: (dayOffset: number) => void;
 }) => {
-  const min = -1300;
-  const max = 17000;
+  const min = -30;
+  const max = 30;
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = parseInt(e.target.value);
@@ -459,7 +459,7 @@ const DateSlider = ({
     <div className="mt-6 space-y-4">
       <div className="flex items-center justify-between">
         <label className="text-lg font-medium text-gray-200">
-          Year: {year < 0 ? `${Math.abs(year)} BC` : `${year} AD`}
+          Day Offset: {dayOffset > 0 ? `+${dayOffset}` : dayOffset} day{Math.abs(dayOffset) === 1 ? "" : "s"} from today
         </label>
       </div>
 
@@ -467,15 +467,15 @@ const DateSlider = ({
         type="range"
         min={min}
         max={max}
-        value={year}
+        value={dayOffset}
         onChange={handleSliderChange}
         className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
       />
 
       <div className="flex justify-between text-xs text-gray-500">
-        <span>1300 BC</span>
-        <span>Now ({DateTime.now().year} AD)</span>
-        <span>17000 AD</span>
+        <span>-30 days</span>
+        <span>Today</span>
+        <span>+30 days</span>
       </div>
     </div>
   );
@@ -643,14 +643,30 @@ const ChartViewerTab = ({
   const [chartData, setChartData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedYear, setSelectedYear] = useState<number>(DateTime.now().year);
+  const baseDate = React.useMemo(() => DateTime.now(), []);
+  const [selectedDayOffset, setSelectedDayOffset] = useState<number>(0);
 
-  // Update date when slider year changes
-  const handleYearChange = (year: number) => {
-    setSelectedYear(year);
-    // Keep current month, day, hour, minute but change the year
-    setCurrentDate(currentDate.set({ year }));
+  // Update date when slider offset changes
+  const handleDayOffsetChange = (dayOffset: number) => {
+    const clampedOffset = Math.max(-30, Math.min(30, dayOffset));
+    setSelectedDayOffset(clampedOffset);
+    setCurrentDate((prev) =>
+      baseDate
+        .plus({ days: clampedOffset })
+        .set({ hour: prev.hour, minute: prev.minute })
+    );
   };
+
+  // Keep slider synced if date is changed manually.
+  useEffect(() => {
+    const dayDiff = Math.round(
+      currentDate.startOf("day").diff(baseDate.startOf("day"), "days").days
+    );
+    const clampedDayDiff = Math.max(-30, Math.min(30, dayDiff));
+    if (clampedDayDiff !== selectedDayOffset) {
+      setSelectedDayOffset(clampedDayDiff);
+    }
+  }, [currentDate, baseDate, selectedDayOffset]);
 
   useEffect(() => {
     if (!userId) return;
@@ -719,8 +735,8 @@ const ChartViewerTab = ({
       <ChartWheel chartData={chartData} isLoading={isLoading} />
 
       <DateSlider
-        year={selectedYear}
-        onChange={handleYearChange}
+        dayOffset={selectedDayOffset}
+        onChange={handleDayOffsetChange}
       />
 
       <DateInput date={currentDate} onChange={setCurrentDate} />
