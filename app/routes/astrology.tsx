@@ -1229,7 +1229,7 @@ const ChatInterface = ({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, response]);
+  }, [messages, response, isLoading]);
 
   const isAskDisabled = isLoading || !userQuestion.trim();
 
@@ -1304,10 +1304,6 @@ const ChatInterface = ({
           )}
         </div>
       )}
-
-      <p className="mb-3 text-xs text-gray-400">
-        Responses may take a minute to generate.
-      </p>
 
       <div className={`${!singleResponseMode ? "grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4" : ""} flex-1 min-h-0`}>
         {!singleResponseMode && (
@@ -1409,6 +1405,9 @@ const ChatInterface = ({
           <div className="flex justify-start">
             <div className="bg-gray-700 rounded-lg px-4 py-3">
               <LoadingSpinner />
+              <p className="mt-2 text-xs text-gray-300">
+                Messages may take up to a minute to generate.
+              </p>
             </div>
           </div>
         )}
