@@ -10,11 +10,18 @@ export default function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isValidSession, setIsValidSession] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
   // Check if user has a valid recovery session
   useEffect(() => {
+    const fullUrl = window.location.href;
+    const hash = window.location.hash;
+
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+
+      const debugMessage = `URL: ${fullUrl}\nHash: ${hash}\nHas Session? ${!!session}\nSession Type: ${session?.user?.aud || 'none'}`;
+      setDebugInfo(debugMessage);
 
       // Supabase sets a recovery session when user clicks reset link
       if (session) {
@@ -70,6 +77,20 @@ export default function ResetPassword() {
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+      {/* Debug Banner */}
+      {debugInfo && (
+        <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black p-4 z-50 font-mono text-xs whitespace-pre-wrap">
+          <strong>DEBUG INFO (Reset Password Page):</strong><br/>
+          {debugInfo}
+          <button
+            onClick={() => setDebugInfo('')}
+            className="ml-4 px-2 py-1 bg-black text-white rounded"
+          >
+            Close
+          </button>
+        </div>
+      )}
+
       <div className="w-full max-w-md bg-gray-800 rounded-xl shadow-2xl shadow-indigo-900/50 p-8">
         <header className="text-center mb-8">
           <h1 className="text-3xl font-bold font-serif tracking-wider text-white">

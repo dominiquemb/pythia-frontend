@@ -14,10 +14,15 @@ const Header = () => (
 
 export default function App() {
   const navigate = useNavigate();
+  const [debugInfo, setDebugInfo] = React.useState<string>('');
 
   // Check for password recovery in URL hash
   useEffect(() => {
+    const fullUrl = window.location.href;
     const hash = window.location.hash;
+
+    const debugMessage = `URL: ${fullUrl}\nHash: ${hash}\nIncludes recovery? ${hash.includes('type=recovery')}`;
+    setDebugInfo(debugMessage);
     console.log('[Home] Full URL hash:', hash);
 
     if (hash && hash.includes('type=recovery')) {
@@ -28,6 +33,19 @@ export default function App() {
 
   return (
     <div className="bg-gray-900 min-h-screen font-sans text-white relative">
+      {/* Debug Banner */}
+      {debugInfo && (
+        <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black p-4 z-50 font-mono text-xs whitespace-pre-wrap">
+          <strong>DEBUG INFO (Home Page):</strong><br/>
+          {debugInfo}
+          <button
+            onClick={() => setDebugInfo('')}
+            className="ml-4 px-2 py-1 bg-black text-white rounded"
+          >
+            Close
+          </button>
+        </div>
+      )}
       <div className="p-4 sm:p-6 lg:p-8 flex items-center justify-center min-h-screen">
         <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl shadow-indigo-900/50 overflow-hidden">
           <Header />
