@@ -17,9 +17,15 @@ export function AuthRedirector() {
 
     const hashParams = new URLSearchParams(hash.substring(1));
     const type = hashParams.get('type');
-    console.log('[AuthRedirector] Extracted type:', type);
+    const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
 
-    if (type === 'recovery') {
+    console.log('[AuthRedirector] Extracted type:', type);
+    console.log('[AuthRedirector] Has access_token:', !!accessToken);
+    console.log('[AuthRedirector] Has refresh_token:', !!refreshToken);
+
+    // Check if this is a recovery flow (either type=recovery or has tokens in hash)
+    if (type === 'recovery' || (accessToken && refreshToken)) {
       console.log('[AuthRedirector] Password recovery detected! Redirecting to /reset-password');
       navigate('/reset-password', { replace: true });
       return;

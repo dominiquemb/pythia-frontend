@@ -18,6 +18,38 @@ export default function ResetPassword() {
     const hash = window.location.hash;
 
     const checkSession = async () => {
+      // First, check if there are tokens in the URL hash
+      const hashParams = new URLSearchParams(hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const type = hashParams.get('type');
+
+      // If we have tokens in the URL, set the session manually
+      if (accessToken && type === 'recovery') {
+        console.log('[ResetPassword] Found recovery tokens in URL, setting session...');
+
+        try {
+          // Manually set the session using the tokens from the URL
+          const { data, error: authError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || accessToken, // Use access token as fallback
+          });
+
+          if (authError) {
+            console.error('[ResetPassword] Auth error:', authError);
+            setError("Failed to validate reset link. Please try again.");
+            setDebugInfo(`Error: ${authError.message}`);
+            return;
+          }
+
+          console.log('[ResetPassword] Session set successfully:', data.session);
+        } catch (err: any) {
+          console.error('[ResetPassword] Exception:', err);
+          setError(err.message);
+          return;
+        }
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
 
       const debugMessage = `URL: ${fullUrl}\nHash: ${hash}\nHas Session? ${!!session}\nSession Type: ${session?.user?.aud || 'none'}`;
