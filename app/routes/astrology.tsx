@@ -1905,6 +1905,17 @@ export default function App() {
     const shouldEncrypt = !singleResponseMode && encryptionEnabled;
 
     try {
+      let encryptionReady = encryptionStatus === "unlocked";
+      if (shouldEncrypt && !encryptionReady) {
+        const unlocked = await handleUnlockEncryption();
+        if (!unlocked) {
+          setIsLoading(false);
+          setError("Encryption must be unlocked before sending encrypted chats");
+          return;
+        }
+        encryptionReady = true;
+      }
+
       if (selectedEventIds.length === 0) {
         const shouldContinue = window.confirm(
           "No charts/events are selected. This message will be answered without chart context. Continue?"
@@ -1938,27 +1949,75 @@ export default function App() {
         if (historyRes.ok) {
           const historyData = await historyRes.json();
           const rawMessages = historyData.messages || [];
-          historyContextForRequest = rawMessages
-            .slice(-12)
-            .map((msg) => ({
-              userMessage: msg.userMessage || "",
-              assistantResponse: msg.assistantResponse || "",
-            }))
-            .filter((msg) => msg.userMessage || msg.assistantResponse);
+
+          const mappedMessages = await Promise.all(
+            rawMessages.slice(-12).map(async (msg) => {
+              if (
+                msg.isEncrypted &&
+                encryptionReady &&
+                msg.userMessageEncrypted &&
+                msg.assistantResponseEncrypted &&
+                msg.encryptionIVUser &&
+                msg.encryptionIVAssistant
+              ) {
+                try {
+                  const [userText, assistantText] = await Promise.all([
+                    decryptText(msg.userMessageEncrypted, msg.encryptionIVUser),
+                    decryptText(msg.assistantResponseEncrypted, msg.encryptionIVAssistant),
+                  ]);
+                  return { userMessage: userText, assistantResponse: assistantText };
+                } catch {
+                  return { userMessage: "", assistantResponse: "" };
+                }
+              }
+
+              return {
+                userMessage: msg.userMessage || "",
+                assistantResponse: msg.assistantResponse || "",
+              };
+            })
+          );
+
+          historyContextForRequest = mappedMessages.filter(
+            (msg) => msg.userMessage || msg.assistantResponse
+          );
         }
       }
+
+      const resolvedConversationId =
+        currentConversationId ??
+        (chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.conversationId || null : null);
+
+      if (!singleResponseMode && conversations.length > 0 && !resolvedConversationId) {
+        setIsLoading(false);
+        setError("Select a chat thread before sending so previous context can be included.");
+        return;
+      }
+
+      const formattedHistoryContext = historyContextForRequest
+        .slice(-12)
+        .map(
+          (entry, idx) =>
+            `Turn ${idx + 1}\nUser: ${entry.userMessage}\nAssistant: ${entry.assistantResponse}`
+        )
+        .join("\n\n");
+
+      const finalUserMessageForModel = formattedHistoryContext
+        ? `Context (recent chat history):\n${formattedHistoryContext}\n\nUser message:\n${queryPayload.userQuestion}`
+        : queryPayload.userQuestion;
 
       const requestBody = {
         userId,
         chartData: JSON.stringify(chartDataForQuery),
         userMessage: queryPayload.userQuestion, // API expects userMessage, not userQuestion
-        chatHistoryContext: historyContextForRequest,
+        finalUserMessage: finalUserMessageForModel,
+        chatHistoryContext: historyContextForRequest || [],
         progressed: queryPayload.progressed,
         progressedEventIds: queryPayload.progressedEventIds,
         progressedTimezones: queryPayload.progressedTimezones,
         transitTimestamp: queryPayload.transitTimestamp,
         ...(!singleResponseMode && {
-          conversationId: currentConversationId,
+          conversationId: resolvedConversationId,
           saveToHistory: !shouldEncrypt,
         }),
       };
@@ -1979,16 +2038,9 @@ export default function App() {
         setResponse(data.response);
         setChatHistory([]); // Clear chat history in single response mode
       } else {
-        let resultingConversationId = data.conversationId || currentConversationId;
+        let resultingConversationId = data.conversationId || resolvedConversationId;
 
         if (shouldEncrypt) {
-          if (encryptionStatus !== "unlocked") {
-            const unlocked = await handleUnlockEncryption();
-            if (!unlocked) {
-              throw new Error("Encryption must be unlocked before sending encrypted chats");
-            }
-          }
-
           const [encryptedUser, encryptedAssistant] = await Promise.all([
             encryptText(queryPayload.userQuestion),
             encryptText(data.response),
