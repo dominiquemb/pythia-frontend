@@ -122,8 +122,8 @@ const getPlanetColor = (name: string): string => {
 
 const longitudeToAngle = (longitude: number): number => {
   // Astrological charts start at Aries (0°) at the left (180° in SVG).
-  // SVG angles increase clockwise while zodiac longitude increases counter-clockwise.
-  return 180 - longitude;
+  // Zodiac longitude increases in chart wheel order from the Ascendant side.
+  return 180 + longitude;
 };
 
 const getPointOnCircle = (
@@ -236,9 +236,9 @@ const ZodiacRing = ({
   return (
     <g>
       {zodiacSigns.map((sign, index) => {
-        const startAngle = 180 - index * 30;
-        const endAngle = startAngle - 30;
-        const midAngle = startAngle - 15;
+        const startAngle = 180 + index * 30;
+        const endAngle = startAngle + 30;
+        const midAngle = startAngle + 15;
 
         const startPoint = getPointOnCircle(startAngle, radius, centerX, centerY);
         const endPoint = getPointOnCircle(endAngle, radius, centerX, centerY);

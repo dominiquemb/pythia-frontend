@@ -43,8 +43,8 @@ const getPlanetColor = (name: string): string => {
 // Helper: Convert zodiacal longitude to SVG angle
 const longitudeToAngle = (longitude: number): number => {
   // Astrological charts start at Aries (0°) at the left (180° in SVG)
-  // SVG angles increase clockwise, astro angles counter-clockwise
-  return 180 - longitude;
+  // Match chart wheel direction used in the main astrology tab.
+  return 180 + longitude;
 };
 
 // Helper: Get SVG coordinates for a point on circle
@@ -164,9 +164,9 @@ const ZodiacRing = ({
   return (
     <g>
       {zodiacSigns.map((sign, index) => {
-        const startAngle = 180 - index * 30; // Counter-clockwise from Aries
-        const endAngle = startAngle - 30;
-        const midAngle = startAngle - 15;
+        const startAngle = 180 + index * 30;
+        const endAngle = startAngle + 30;
+        const midAngle = startAngle + 15;
 
         // Draw arc segment
         const startPoint = getPointOnCircle(startAngle, radius, centerX, centerY);
