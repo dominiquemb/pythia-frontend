@@ -1883,27 +1883,6 @@ export default function App() {
     const endpoint = singleResponseMode ? '/query' : '/chat';
     const shouldEncrypt = !singleResponseMode && encryptionEnabled;
 
-    const requestBody = {
-      userId,
-      chartData: JSON.stringify(chartDataForQuery),
-      userMessage: queryPayload.userQuestion, // API expects userMessage, not userQuestion
-      chatHistoryContext: chatHistory
-        .slice(-12)
-        .map((msg) => ({
-          userMessage: msg.userMessage,
-          assistantResponse: msg.assistantResponse,
-        }))
-        .filter((msg) => msg.userMessage && msg.assistantResponse),
-      progressed: queryPayload.progressed,
-      progressedEventIds: queryPayload.progressedEventIds,
-      progressedTimezones: queryPayload.progressedTimezones,
-      transitTimestamp: queryPayload.transitTimestamp,
-      ...(!singleResponseMode && {
-        conversationId: currentConversationId,
-        saveToHistory: !shouldEncrypt,
-      }),
-    };
-
     try {
       if (selectedEventIds.length === 0) {
         const shouldContinue = window.confirm(
@@ -1914,6 +1893,54 @@ export default function App() {
           return;
         }
       }
+
+      let historyContextForRequest = chatHistory
+        .slice(-12)
+        .map((msg) => ({
+          userMessage: msg.userMessage || "",
+          assistantResponse: msg.assistantResponse || "",
+        }))
+        .filter((msg) => msg.userMessage || msg.assistantResponse);
+
+      // Ensure history is included even right after refresh when local state is not hydrated yet.
+      if (!singleResponseMode && historyContextForRequest.length === 0 && currentConversationId) {
+        const historyRes = await fetch(
+          `${baseApiUrl}/chat/${userId}/conversation/${currentConversationId}?limit=100`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `${token}`,
+            },
+          }
+        );
+
+        if (historyRes.ok) {
+          const historyData = await historyRes.json();
+          const rawMessages = historyData.messages || [];
+          historyContextForRequest = rawMessages
+            .slice(-12)
+            .map((msg) => ({
+              userMessage: msg.userMessage || "",
+              assistantResponse: msg.assistantResponse || "",
+            }))
+            .filter((msg) => msg.userMessage || msg.assistantResponse);
+        }
+      }
+
+      const requestBody = {
+        userId,
+        chartData: JSON.stringify(chartDataForQuery),
+        userMessage: queryPayload.userQuestion, // API expects userMessage, not userQuestion
+        chatHistoryContext: historyContextForRequest,
+        progressed: queryPayload.progressed,
+        progressedEventIds: queryPayload.progressedEventIds,
+        progressedTimezones: queryPayload.progressedTimezones,
+        transitTimestamp: queryPayload.transitTimestamp,
+        ...(!singleResponseMode && {
+          conversationId: currentConversationId,
+          saveToHistory: !shouldEncrypt,
+        }),
+      };
 
       const res = await fetch(`${baseApiUrl}${endpoint}`, {
         method: "POST",
