@@ -3,14 +3,29 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { DateTime } from "luxon";
 import { commonTimezones } from "../lib/timezones";
+import { useEncryption } from "../lib/EncryptionContext";
 
 // --- TypeScript Types ---
 interface ChatMessage {
   messageId: number;
-  userMessage: string;
-  assistantResponse: string;
+  conversationId?: number;
+  userMessage?: string;
+  assistantResponse?: string;
+  userMessageEncrypted?: string;
+  assistantResponseEncrypted?: string;
+  encryptionIVUser?: string;
+  encryptionIVAssistant?: string;
+  isEncrypted?: boolean;
   eventIdsUsed: number[];
   createdAt: string;
+}
+
+interface ChatSession {
+  conversationId: number;
+  title: string;
+  createdAt: string;
+  lastMessageAt: string | null;
+  messageCount: number;
 }
 
 // --- Helper & Icon Components ---
@@ -1169,12 +1184,20 @@ const EventConfigSection = ({
 
 const ChatInterface = ({
   messages,
+  conversations,
+  currentConversationId,
+  onSelectConversation,
+  onNewConversation,
   isLoading,
   error,
   onClearSession,
   onSubmit,
   singleResponseMode,
   setSingleResponseMode,
+  encryptionEnabled,
+  setEncryptionEnabled,
+  encryptionStatus,
+  onUnlockEncryption,
   response,
   progressedChecks,
   progressedTimezones,
@@ -1221,15 +1244,62 @@ const ChatInterface = ({
         <h2 className="text-2xl font-semibold text-white">
           {singleResponseMode ? "Response" : "Chat History"}
         </h2>
-        {!singleResponseMode && messages.length > 0 && (
-          <button
-            onClick={onClearSession}
-            className="text-sm text-red-400 hover:text-red-300"
-          >
-            Clear Session
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {!singleResponseMode && (
+            <>
+              <button
+                onClick={onNewConversation}
+                className="text-sm text-indigo-300 hover:text-indigo-200"
+              >
+                New Chat
+              </button>
+              {messages.length > 0 && (
+                <button
+                  onClick={onClearSession}
+                  className="text-sm text-red-400 hover:text-red-300"
+                >
+                  Clear Chat
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
+
+      {!singleResponseMode && (
+        <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+          <select
+            value={currentConversationId ?? ""}
+            onChange={(e) => onSelectConversation(Number(e.target.value))}
+            className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+          >
+            <option value="">New Chat</option>
+            {conversations.map((session) => (
+              <option key={session.conversationId} value={session.conversationId}>
+                {session.title || `Chat ${session.conversationId}`}
+              </option>
+            ))}
+          </select>
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input
+              type="checkbox"
+              checked={encryptionEnabled}
+              onChange={(e) => setEncryptionEnabled(e.target.checked)}
+              className="rounded bg-gray-600 border-gray-500 text-indigo-500"
+            />
+            <span>Encrypt chats</span>
+          </label>
+          {encryptionEnabled && encryptionStatus !== "unlocked" && (
+            <button
+              type="button"
+              onClick={onUnlockEncryption}
+              className="text-sm px-3 py-2 bg-indigo-600 rounded-lg hover:bg-indigo-700"
+            >
+              Unlock
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Chat messages / Single response */}
       <div
@@ -1268,11 +1338,11 @@ const ChatInterface = ({
             {messages.map((msg) => (
               <div key={msg.messageId} className="space-y-2">
                 {/* User message */}
-                <div className="flex justify-end">
-                  <div className="bg-indigo-600 text-white rounded-lg px-4 py-2 max-w-[80%]">
-                    {msg.userMessage}
+                  <div className="flex justify-end">
+                    <div className="bg-indigo-600 text-white rounded-lg px-4 py-2 max-w-[80%]">
+                    {msg.userMessage || ""}
+                    </div>
                   </div>
-                </div>
 
                 {/* Assistant response */}
                 <div className="flex justify-start">
@@ -1280,7 +1350,7 @@ const ChatInterface = ({
                     <div
                       className="prose prose-invert prose-sm max-w-none"
                       dangerouslySetInnerHTML={{
-                        __html: msg.assistantResponse.replace(/\n/g, '<br />')
+                        __html: (msg.assistantResponse || "").replace(/\n/g, '<br />')
                       }}
                     />
                   </div>
@@ -1368,7 +1438,6 @@ const ChatInterface = ({
 
 export default function App() {
   const navigate = useNavigate();
-  const [session, setSession] = useState(null);
   const [userId, setUserId] = useState(null);
   const [isUserLoading, setIsUserLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -1390,8 +1459,11 @@ export default function App() {
   // Chat mode state
   const [singleResponseMode, setSingleResponseMode] = useState<boolean>(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [currentSessionKey, setCurrentSessionKey] = useState<string>('');
+  const [conversations, setConversations] = useState<ChatSession[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
+  const [encryptionEnabled, setEncryptionEnabled] = useState<boolean>(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
+  const { status: encryptionStatus, hasStoredKeys, initializeWithPassphrase, unlockWithPassphrase, encryptText, decryptText } = useEncryption();
 
   // This initial effect just verifies the user and sets their ID
   useEffect(() => {
@@ -1402,6 +1474,7 @@ export default function App() {
       if (user) {
         setUserId(user.id);
         await fetchEvents(user.id);
+        await fetchConversations(user.id);
       } else {
         navigate("/home");
       }
@@ -1417,35 +1490,41 @@ export default function App() {
     }
   }, [saveMessage]);
 
-  // Update session key when checked events or userId changes
   useEffect(() => {
-    if (!userId) return;
+    if (!singleResponseMode && currentConversationId) {
+      loadChatHistory(currentConversationId);
+    }
+    if (!singleResponseMode && !currentConversationId) {
+      setChatHistory([]);
+    }
+  }, [singleResponseMode, currentConversationId, encryptionEnabled, encryptionStatus]);
 
-    const selectedIds = Object.keys(checkedEvents)
-      .filter((id) => checkedEvents[id])
-      .map(Number)
-      .sort((a, b) => a - b);
+  const fetchConversations = async (currentUserId: string) => {
+    const token = await getFreshToken();
+    if (!token) return;
 
-    const newSessionKey = generateSessionKey(userId, selectedIds);
-
-    if (newSessionKey !== currentSessionKey) {
-      setCurrentSessionKey(newSessionKey);
-      if (!singleResponseMode) {
-        loadChatHistory(newSessionKey);
+    const baseApiUrl = import.meta.env.VITE_API_URI;
+    try {
+      const res = await fetch(`${baseApiUrl}/chat-sessions/${currentUserId}`, {
+        headers: {
+          Authorization: `${token}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to load chat sessions");
+      const data = await res.json();
+      const loaded = data.sessions || [];
+      setConversations(loaded);
+      if (loaded.length > 0 && !currentConversationId) {
+        setCurrentConversationId(loaded[0].conversationId);
       }
+    } catch (err) {
+      console.error("Failed to fetch chat sessions:", err);
+      setConversations([]);
     }
-  }, [checkedEvents, userId, singleResponseMode]);
-
-  const generateSessionKey = (userId: string, eventIds: number[]): string => {
-    if (eventIds.length === 0) {
-      return `user_${userId}_events_general`;
-    }
-    const sortedIds = eventIds.sort((a, b) => a - b).join('-');
-    return `user_${userId}_events_${sortedIds}`;
   };
 
-  const loadChatHistory = async (sessionKey: string) => {
-    if (!sessionKey || !userId) return;
+  const loadChatHistory = async (conversationId: number) => {
+    if (!conversationId || !userId) return;
 
     setIsLoadingHistory(true);
     const token = await getFreshToken();
@@ -1454,7 +1533,7 @@ export default function App() {
     const baseApiUrl = import.meta.env.VITE_API_URI;
     try {
       const res = await fetch(
-        `${baseApiUrl}/chat/${userId}/${sessionKey}?limit=100`,
+        `${baseApiUrl}/chat/${userId}/conversation/${conversationId}?limit=100`,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -1464,7 +1543,45 @@ export default function App() {
       );
       if (!res.ok) throw new Error('Failed to load chat history');
       const data = await res.json();
-      setChatHistory(data.messages || []);
+      const loadedMessages = data.messages || [];
+
+      if (encryptionEnabled && encryptionStatus === "unlocked") {
+        const decryptedMessages = await Promise.all(
+          loadedMessages.map(async (msg: ChatMessage) => {
+            if (!msg.isEncrypted) return msg;
+            if (!msg.userMessageEncrypted || !msg.assistantResponseEncrypted || !msg.encryptionIVUser || !msg.encryptionIVAssistant) {
+              return msg;
+            }
+
+            try {
+              const [userMessage, assistantResponse] = await Promise.all([
+                decryptText(msg.userMessageEncrypted, msg.encryptionIVUser),
+                decryptText(msg.assistantResponseEncrypted, msg.encryptionIVAssistant),
+              ]);
+              return { ...msg, userMessage, assistantResponse };
+            } catch {
+              return {
+                ...msg,
+                userMessage: "[Unable to decrypt message]",
+                assistantResponse: "[Unable to decrypt response]",
+              };
+            }
+          })
+        );
+        setChatHistory(decryptedMessages);
+      } else {
+        setChatHistory(
+          loadedMessages.map((msg: ChatMessage) =>
+            msg.isEncrypted
+              ? {
+                  ...msg,
+                  userMessage: msg.userMessage || "[Encrypted message]",
+                  assistantResponse: msg.assistantResponse || "[Encrypted response]",
+                }
+              : msg
+          )
+        );
+      }
     } catch (err) {
       console.error('Failed to load chat history:', err);
       setChatHistory([]);
@@ -1474,7 +1591,8 @@ export default function App() {
   };
 
   const handleClearSession = async () => {
-    if (!window.confirm('Clear all messages in this chat session?')) return;
+    if (!currentConversationId) return;
+    if (!window.confirm('Clear all messages in this chat?')) return;
 
     const token = await getFreshToken();
     if (!token) return;
@@ -1482,7 +1600,7 @@ export default function App() {
     const baseApiUrl = import.meta.env.VITE_API_URI;
     try {
       const res = await fetch(
-        `${baseApiUrl}/chat-session/${userId}/${currentSessionKey}`,
+        `${baseApiUrl}/chat-conversation/${userId}/${currentConversationId}`,
         {
           method: 'DELETE',
           headers: { Authorization: `${token}` },
@@ -1491,7 +1609,8 @@ export default function App() {
 
       if (!res.ok) throw new Error('Failed to clear session');
       setChatHistory([]);
-      setSaveMessage('Chat session cleared successfully.');
+      setSaveMessage('Chat cleared successfully.');
+      await fetchConversations(userId);
     } catch (err) {
       setError(`Failed to clear session: ${err.message}`);
     }
@@ -1641,6 +1760,41 @@ export default function App() {
     setProgressedChecks((prev) => ({ ...prev, [eventId]: !prev[eventId] }));
   };
 
+  const handleNewConversation = () => {
+    setCurrentConversationId(null);
+    setChatHistory([]);
+  };
+
+  const handleSelectConversation = (conversationId: number) => {
+    if (!conversationId) {
+      handleNewConversation();
+      return;
+    }
+    setCurrentConversationId(conversationId);
+  };
+
+  const handleUnlockEncryption = async (): Promise<boolean> => {
+    try {
+      const passphrase = window.prompt(
+        hasStoredKeys
+          ? "Enter your encryption passphrase to unlock this device:"
+          : "Set an encryption passphrase for your chats:"
+      );
+      if (!passphrase) return false;
+
+      if (hasStoredKeys) {
+        await unlockWithPassphrase(passphrase);
+      } else {
+        const initialized = await initializeWithPassphrase(passphrase);
+        window.alert(`Save this recovery key securely:\n\n${initialized.recoveryKey}`);
+      }
+      return true;
+    } catch (err) {
+      setError(err.message || "Failed to unlock encryption");
+      return false;
+    }
+  };
+
   const handleAstrologyQuery = async (queryPayload) => {
     setIsLoading(true);
     setError(null);
@@ -1661,6 +1815,7 @@ export default function App() {
 
     const baseApiUrl = import.meta.env.VITE_API_URI;
     const endpoint = singleResponseMode ? '/query' : '/chat';
+    const shouldEncrypt = !singleResponseMode && encryptionEnabled;
 
     const requestBody = {
       userId,
@@ -1671,8 +1826,8 @@ export default function App() {
       progressedTimezones: queryPayload.progressedTimezones,
       transitTimestamp: queryPayload.transitTimestamp,
       ...(!singleResponseMode && {
-        sessionKey: currentSessionKey,
-        saveToHistory: true,
+        conversationId: currentConversationId,
+        saveToHistory: !shouldEncrypt,
       }),
     };
 
@@ -1693,15 +1848,65 @@ export default function App() {
         setResponse(data.response);
         setChatHistory([]); // Clear chat history in single response mode
       } else {
+        let resultingConversationId = data.conversationId || currentConversationId;
+
+        if (shouldEncrypt) {
+          if (encryptionStatus !== "unlocked") {
+            const unlocked = await handleUnlockEncryption();
+            if (!unlocked) {
+              throw new Error("Encryption must be unlocked before sending encrypted chats");
+            }
+          }
+
+          const [encryptedUser, encryptedAssistant] = await Promise.all([
+            encryptText(queryPayload.userQuestion),
+            encryptText(data.response),
+          ]);
+
+          const encryptedSaveResponse = await fetch(`${baseApiUrl}/chat/save-encrypted`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `${token}`,
+            },
+            body: JSON.stringify({
+              userId,
+              conversationId: currentConversationId,
+              userMessageEncrypted: encryptedUser.ciphertext,
+              assistantResponseEncrypted: encryptedAssistant.ciphertext,
+              encryptionIVUser: encryptedUser.iv,
+              encryptionIVAssistant: encryptedAssistant.iv,
+              eventIdsUsed: selectedEventIds,
+              queryMetadata: {
+                transitTimestamp: queryPayload.transitTimestamp,
+                progressed: queryPayload.progressed,
+                progressedEventIds: queryPayload.progressedEventIds,
+                progressedTimezones: queryPayload.progressedTimezones,
+              },
+            }),
+          });
+
+          const encryptedSaveData = await encryptedSaveResponse.json();
+          if (!encryptedSaveResponse.ok) {
+            throw new Error(encryptedSaveData?.error || "Failed to save encrypted chat");
+          }
+          resultingConversationId = encryptedSaveData.conversationId || resultingConversationId;
+        }
+
         // Add to chat history immediately
         const newMessage: ChatMessage = {
           messageId: data.messageId || Date.now(),
+          conversationId: resultingConversationId || undefined,
           userMessage: queryPayload.userQuestion,
           assistantResponse: data.response,
           eventIdsUsed: selectedEventIds,
           createdAt: new Date().toISOString(),
         };
         setChatHistory((prev) => [...prev, newMessage]);
+        if (resultingConversationId) {
+          setCurrentConversationId(resultingConversationId);
+        }
+        await fetchConversations(userId);
         setResponse(''); // Clear single response
       }
     } catch (err) {
@@ -1754,12 +1959,20 @@ export default function App() {
                 {/* Chat Interface with Input at Bottom */}
                 <ChatInterface
                   messages={chatHistory}
-                  isLoading={isLoading}
+                  conversations={conversations}
+                  currentConversationId={currentConversationId}
+                  onSelectConversation={handleSelectConversation}
+                  onNewConversation={handleNewConversation}
+                  isLoading={isLoading || isLoadingHistory}
                   error={error}
                   onClearSession={handleClearSession}
                   onSubmit={handleAstrologyQuery}
                   singleResponseMode={singleResponseMode}
                   setSingleResponseMode={setSingleResponseMode}
+                  encryptionEnabled={encryptionEnabled}
+                  setEncryptionEnabled={setEncryptionEnabled}
+                  encryptionStatus={encryptionStatus}
+                  onUnlockEncryption={handleUnlockEncryption}
                   response={response}
                   progressedChecks={progressedChecks}
                   progressedTimezones={progressedTimezones}

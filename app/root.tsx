@@ -10,6 +10,7 @@ import {
   type LoaderFunctionArgs,
 } from "react-router";
 import { SessionProvider } from "./lib/SessionContext";
+import { EncryptionProvider } from "./lib/EncryptionContext";
 import type { Route } from "./+types/root";
 import "./app.css";
 import { createClient } from "@supabase/supabase-js";
@@ -58,8 +59,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <SessionProvider>
-      <AuthRedirector /> {/* ✅ 2. Add the redirector component here */}
-      <Outlet />
+      <EncryptionProvider>
+        <AuthRedirector /> {/* ✅ 2. Add the redirector component here */}
+        <Outlet />
+      </EncryptionProvider>
     </SessionProvider>
   );
 }
