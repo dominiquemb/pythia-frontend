@@ -1887,6 +1887,13 @@ export default function App() {
       userId,
       chartData: JSON.stringify(chartDataForQuery),
       userMessage: queryPayload.userQuestion, // API expects userMessage, not userQuestion
+      chatHistoryContext: chatHistory
+        .slice(-12)
+        .map((msg) => ({
+          userMessage: msg.userMessage,
+          assistantResponse: msg.assistantResponse,
+        }))
+        .filter((msg) => msg.userMessage && msg.assistantResponse),
       progressed: queryPayload.progressed,
       progressedEventIds: queryPayload.progressedEventIds,
       progressedTimezones: queryPayload.progressedTimezones,
@@ -1898,6 +1905,16 @@ export default function App() {
     };
 
     try {
+      if (selectedEventIds.length === 0) {
+        const shouldContinue = window.confirm(
+          "No charts/events are selected. This message will be answered without chart context. Continue?"
+        );
+        if (!shouldContinue) {
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const res = await fetch(`${baseApiUrl}${endpoint}`, {
         method: "POST",
         headers: {
