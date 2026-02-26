@@ -1988,11 +1988,7 @@ export default function App() {
         currentConversationId ??
         (chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.conversationId || null : null);
 
-      if (!singleResponseMode && conversations.length > 0 && !resolvedConversationId) {
-        setIsLoading(false);
-        setError("Select a chat thread before sending so previous context can be included.");
-        return;
-      }
+      // Allow creating new conversations - backend will create one if conversationId is null
 
       const historyBlocks = historyContextForRequest
         .slice(-12)
