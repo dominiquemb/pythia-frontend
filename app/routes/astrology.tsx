@@ -1219,11 +1219,29 @@ const ChatInterface = ({
   progressedTimezones,
 }: any) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [userQuestion, setUserQuestion] = useState("");
   const [includeTransits, setIncludeTransits] = useState(true);
   const [transitTimestamp, setTransitTimestamp] = useState(
     DateTime.now().toFormat("yyyy-MM-dd'T'HH:mm")
   );
+  const [attachedImage, setAttachedImage] = useState<{ mimeType: string; data: string; previewUrl: string } | null>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const [header, data] = dataUrl.split(",");
+      const mimeType = header.match(/:(.*?);/)?.[1] || "image/jpeg";
+      setAttachedImage({ mimeType, data, previewUrl: dataUrl });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const clearImage = () => setAttachedImage(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -1231,7 +1249,7 @@ const ChatInterface = ({
     }
   }, [messages, response, isLoading]);
 
-  const isAskDisabled = isLoading || !userQuestion.trim();
+  const isAskDisabled = isLoading || (!userQuestion.trim() && !attachedImage);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1247,10 +1265,12 @@ const ChatInterface = ({
       transitTimestamp: includeTransits
         ? DateTime.fromISO(transitTimestamp).toISO()
         : null,
+      ...(attachedImage && { imageData: { mimeType: attachedImage.mimeType, data: attachedImage.data } }),
     };
 
     onSubmit(queryPayload);
-    setUserQuestion(""); // Clear input after sending
+    setUserQuestion("");
+    setAttachedImage(null);
   };
 
   return (
@@ -1421,7 +1441,36 @@ const ChatInterface = ({
 
       {/* Question input form */}
       <form onSubmit={handleSubmit} className="space-y-3 border-t border-gray-700 pt-4">
+        {attachedImage && (
+          <div className="relative inline-flex">
+            <img src={attachedImage.previewUrl} alt="Attached" className="h-16 w-16 rounded-lg object-cover border border-gray-600" />
+            <button
+              type="button"
+              onClick={clearImage}
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-900 border border-gray-600 rounded-full text-gray-300 hover:text-white flex items-center justify-center text-xs leading-none"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageSelect}
+            disabled={isLoading}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-300 hover:text-white hover:border-gray-500 focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isLoading}
+            title="Attach image"
+          >
+            📎
+          </button>
           <input
             id="userQuestion"
             type="text"
@@ -2010,6 +2059,7 @@ export default function App() {
         progressedEventIds: queryPayload.progressedEventIds,
         progressedTimezones: queryPayload.progressedTimezones,
         transitTimestamp: queryPayload.transitTimestamp,
+        ...(queryPayload.imageData && { imageData: queryPayload.imageData }),
         ...(!singleResponseMode && {
           conversationId: resolvedConversationId,
           saveToHistory: !shouldEncrypt,
