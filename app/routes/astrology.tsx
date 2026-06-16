@@ -1225,23 +1225,25 @@ const ChatInterface = ({
   const [transitTimestamp, setTransitTimestamp] = useState(
     DateTime.now().toFormat("yyyy-MM-dd'T'HH:mm")
   );
-  const [attachedImage, setAttachedImage] = useState<{ mimeType: string; data: string; previewUrl: string } | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<{ mimeType: string; data: string; previewUrl: string; fileName: string }[]>([]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const [header, data] = dataUrl.split(",");
-      const mimeType = header.match(/:(.*?);/)?.[1] || "image/jpeg";
-      setAttachedImage({ mimeType, data, previewUrl: dataUrl });
-    };
-    reader.readAsDataURL(file);
+    const selected = Array.from(e.target.files || []);
+    if (!selected.length) return;
+    selected.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const [header, data] = dataUrl.split(",");
+        const mimeType = header.match(/:(.*?);/)?.[1] || file.type || "application/octet-stream";
+        setAttachedFiles((prev) => [...prev, { mimeType, data, previewUrl: dataUrl, fileName: file.name }]);
+      };
+      reader.readAsDataURL(file);
+    });
     e.target.value = "";
   };
 
-  const clearImage = () => setAttachedImage(null);
+  const removeFile = (index: number) => setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -1249,7 +1251,7 @@ const ChatInterface = ({
     }
   }, [messages, response, isLoading]);
 
-  const isAskDisabled = isLoading || (!userQuestion.trim() && !attachedImage);
+  const isAskDisabled = isLoading || (!userQuestion.trim() && !attachedFiles.length);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1265,12 +1267,12 @@ const ChatInterface = ({
       transitTimestamp: includeTransits
         ? DateTime.fromISO(transitTimestamp).toISO()
         : null,
-      ...(attachedImage && { imageData: { mimeType: attachedImage.mimeType, data: attachedImage.data } }),
+      ...(attachedFiles.length && { files: attachedFiles.map(({ mimeType, data }) => ({ mimeType, data })) }),
     };
 
     onSubmit(queryPayload);
     setUserQuestion("");
-    setAttachedImage(null);
+    setAttachedFiles([]);
   };
 
   return (
@@ -1441,52 +1443,73 @@ const ChatInterface = ({
 
       {/* Question input form */}
       <form onSubmit={handleSubmit} className="space-y-3 border-t border-gray-700 pt-4">
-        {attachedImage && (
-          <div className="relative inline-flex">
-            <img src={attachedImage.previewUrl} alt="Attached" className="h-16 w-16 rounded-lg object-cover border border-gray-600" />
-            <button
-              type="button"
-              onClick={clearImage}
-              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-900 border border-gray-600 rounded-full text-gray-300 hover:text-white flex items-center justify-center text-xs leading-none"
-            >
-              ✕
-            </button>
+        {attachedFiles.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {attachedFiles.map((f, i) => (
+              <div key={i} className="relative inline-flex">
+                {f.mimeType.startsWith("image/") ? (
+                  <img src={f.previewUrl} alt="Attached" className="h-16 w-16 rounded-lg object-cover border border-gray-600" />
+                ) : (
+                  <div className="h-16 px-3 rounded-lg border border-gray-600 bg-gray-700 flex flex-col items-center justify-center gap-1 max-w-[160px]">
+                    <span className="text-xl">📄</span>
+                    <span className="text-gray-300 text-xs truncate w-full text-center">{f.fileName}</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeFile(i)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-900 border border-gray-600 rounded-full text-gray-300 hover:text-white flex items-center justify-center text-xs leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2">
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="*/*"
+            multiple
             className="hidden"
             onChange={handleImageSelect}
             disabled={isLoading}
           />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-300 hover:text-white hover:border-gray-500 focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isLoading}
-            title="Attach image"
-          >
-            📎
-          </button>
-          <input
+          <textarea
             id="userQuestion"
-            type="text"
             value={userQuestion}
             onChange={(e) => setUserQuestion(e.target.value)}
-            placeholder="Ask a question..."
-            className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                if (!isAskDisabled) handleSubmit(e as any);
+              }
+            }}
+            placeholder="Ask a question... (Ctrl+Enter to send)"
+            rows={3}
+            className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-y"
             disabled={isLoading}
           />
-          <button
-            type="submit"
-            className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 disabled:bg-gray-500 disabled:cursor-not-allowed transition-all"
-            disabled={isAskDisabled}
-          >
-            {isLoading ? "..." : "Send"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-300 hover:text-white hover:border-gray-500 focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isLoading}
+              title="Attach file"
+            >
+              📎
+            </button>
+            <div className="flex-1" />
+            <button
+              type="submit"
+              className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 disabled:bg-gray-500 disabled:cursor-not-allowed transition-all"
+              disabled={isAskDisabled}
+            >
+              {isLoading ? "..." : "Send"}
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-4 text-sm">
