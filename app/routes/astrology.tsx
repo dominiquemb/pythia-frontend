@@ -1220,9 +1220,14 @@ const ChatInterface = ({
   hasOlderMessages,
   isLoadingOlder,
   onLoadOlder,
+  isViewingRecent,
+  onJumpToBottom,
 }: any) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevScrollHeightRef = useRef<number>(0);
+  const isLoadingOlderRef = useRef<boolean>(false);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const [userQuestion, setUserQuestion] = useState("");
   const [includeTransits, setIncludeTransits] = useState(true);
   const [transitTimestamp, setTransitTimestamp] = useState(
@@ -1248,11 +1253,51 @@ const ChatInterface = ({
 
   const removeFile = (index: number) => setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
 
+  // Scroll to bottom on new messages/response (but not when prepending older messages)
   useEffect(() => {
+    if (isLoadingOlderRef.current) return;
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, response, isLoading]);
+
+  // When jump-to-bottom restores recent messages, force scroll to bottom
+  useEffect(() => {
+    if (isViewingRecent && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [isViewingRecent]);
+
+  // Save scroll height before older messages are prepended, restore after
+  useEffect(() => {
+    if (isLoadingOlder) {
+      isLoadingOlderRef.current = true;
+      if (scrollRef.current) {
+        prevScrollHeightRef.current = scrollRef.current.scrollHeight;
+      }
+    } else if (isLoadingOlderRef.current) {
+      isLoadingOlderRef.current = false;
+      if (scrollRef.current && prevScrollHeightRef.current > 0) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight - prevScrollHeightRef.current;
+        prevScrollHeightRef.current = 0;
+      }
+    }
+  }, [isLoadingOlder]);
+
+  // Scroll listener: trigger older load near top, show/hide jump-to-bottom
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      setShowJumpToBottom(scrollHeight - scrollTop - clientHeight > 150);
+      if (scrollTop < 80 && !isLoadingOlderRef.current && hasOlderMessages) {
+        onLoadOlder?.();
+      }
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [hasOlderMessages, onLoadOlder]);
 
   const isAskDisabled = isLoading || (!userQuestion.trim() && !attachedFiles.length);
 
@@ -1363,6 +1408,7 @@ const ChatInterface = ({
 
         <div className="min-h-0 flex flex-col">
       {/* Chat messages / Single response */}
+      <div className="relative">
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto space-y-4 pr-2 mb-4"
@@ -1390,16 +1436,9 @@ const ChatInterface = ({
         ) : (
           // Chat history mode
           <>
-            {hasOlderMessages && (
-              <div className="flex justify-center mb-3">
-                <button
-                  type="button"
-                  onClick={onLoadOlder}
-                  disabled={isLoadingOlder}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50 border border-indigo-700 hover:border-indigo-500 rounded-full px-4 py-1 transition-colors"
-                >
-                  {isLoadingOlder ? 'Loading…' : 'Load older messages'}
-                </button>
+            {isLoadingOlder && (
+              <div className="flex justify-center py-2">
+                <span className="text-xs text-gray-500">Loading older messages…</span>
               </div>
             )}
 
@@ -1449,6 +1488,24 @@ const ChatInterface = ({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Jump to bottom button */}
+      {(showJumpToBottom || !isViewingRecent) && (
+        <button
+          type="button"
+          onClick={() => {
+            if (!isViewingRecent) {
+              onJumpToBottom?.();
+            } else if (scrollRef.current) {
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+          }}
+          className="absolute bottom-2 right-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-full px-3 py-1.5 shadow-lg transition-colors flex items-center gap-1"
+        >
+          {!isViewingRecent ? '↓ Jump to latest' : '↓'}
+        </button>
+      )}
       </div>
 
       {error && (
@@ -1594,6 +1651,9 @@ export default function App() {
   const [chatOffset, setChatOffset] = useState<number>(0);
   const [chatTotal, setChatTotal] = useState<number>(0);
   const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
+  const [isViewingRecent, setIsViewingRecent] = useState<boolean>(true);
+  const mostRecentMessagesRef = useRef<ChatMessage[]>([]);
+  const mostRecentOffsetRef = useRef<number>(0);
   const [encryptionEnabled, setEncryptionEnabled] = useState<boolean>(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
   const { status: encryptionStatus, hasStoredKeys, initializeWithPassphrase, unlockWithPassphrase, encryptText, decryptText } = useEncryption();
@@ -1669,44 +1729,57 @@ export default function App() {
     }
   };
 
+  const PAGE_SIZE = 50;
+  const MAX_WINDOW = PAGE_SIZE * 3; // max messages to keep rendered at once
+
+  const decryptMessages = async (msgs: ChatMessage[]): Promise<ChatMessage[]> => {
+    if (encryptionEnabled && encryptionStatus === "unlocked") {
+      return Promise.all(
+        msgs.map(async (msg: ChatMessage) => {
+          if (!msg.isEncrypted || !msg.userMessageEncrypted || !msg.assistantResponseEncrypted || !msg.encryptionIVUser || !msg.encryptionIVAssistant) {
+            return msg;
+          }
+          try {
+            const [userMessage, assistantResponse] = await Promise.all([
+              decryptText(msg.userMessageEncrypted, msg.encryptionIVUser),
+              decryptText(msg.assistantResponseEncrypted, msg.encryptionIVAssistant),
+            ]);
+            return { ...msg, userMessage, assistantResponse };
+          } catch {
+            return { ...msg, userMessage: "[Unable to decrypt message]", assistantResponse: "[Unable to decrypt response]" };
+          }
+        })
+      );
+    }
+    return msgs.map((msg: ChatMessage) =>
+      msg.isEncrypted
+        ? { ...msg, userMessage: msg.userMessage || "[Encrypted message]", assistantResponse: msg.assistantResponse || "[Encrypted response]" }
+        : msg
+    );
+  };
+
   const processAndSetMessages = async (
     loadedMessages: ChatMessage[],
     offset: number,
     total: number,
     prepend = false
   ) => {
-    const process = async (msgs: ChatMessage[]) => {
-      if (encryptionEnabled && encryptionStatus === "unlocked") {
-        return Promise.all(
-          msgs.map(async (msg: ChatMessage) => {
-            if (!msg.isEncrypted || !msg.userMessageEncrypted || !msg.assistantResponseEncrypted || !msg.encryptionIVUser || !msg.encryptionIVAssistant) {
-              return msg;
-            }
-            try {
-              const [userMessage, assistantResponse] = await Promise.all([
-                decryptText(msg.userMessageEncrypted, msg.encryptionIVUser),
-                decryptText(msg.assistantResponseEncrypted, msg.encryptionIVAssistant),
-              ]);
-              return { ...msg, userMessage, assistantResponse };
-            } catch {
-              return { ...msg, userMessage: "[Unable to decrypt message]", assistantResponse: "[Unable to decrypt response]" };
-            }
-          })
-        );
-      }
-      return msgs.map((msg: ChatMessage) =>
-        msg.isEncrypted
-          ? { ...msg, userMessage: msg.userMessage || "[Encrypted message]", assistantResponse: msg.assistantResponse || "[Encrypted response]" }
-          : msg
-      );
-    };
-
-    const processed = await process(loadedMessages);
-    setChatOffset(offset);
+    const processed = await decryptMessages(loadedMessages);
     setChatTotal(total);
+
     if (prepend) {
-      setChatHistory((prev) => [...processed, ...prev]);
+      setChatOffset(offset);
+      setChatHistory((prev) => {
+        const combined = [...processed, ...prev];
+        if (combined.length > MAX_WINDOW) {
+          // Drop newest messages beyond the window; most recent page is in mostRecentMessagesRef
+          setIsViewingRecent(false);
+          return combined.slice(0, MAX_WINDOW);
+        }
+        return combined;
+      });
     } else {
+      setChatOffset(offset);
       setChatHistory(processed);
     }
   };
@@ -1761,7 +1834,14 @@ export default function App() {
         setCheckedEvents({});
       }
 
-      await processAndSetMessages(loadedMessages, startOffset, total);
+      // Save the most recent page — always kept in memory for jump-to-bottom
+      const processed = await decryptMessages(loadedMessages);
+      mostRecentMessagesRef.current = processed;
+      mostRecentOffsetRef.current = startOffset;
+      setIsViewingRecent(true);
+      setChatOffset(startOffset);
+      setChatTotal(total);
+      setChatHistory(processed);
     } catch (err) {
       console.error('Failed to load chat history:', err);
       setChatHistory([]);
@@ -1777,7 +1857,6 @@ export default function App() {
     const token = await getFreshToken();
     if (!token) { setIsLoadingOlder(false); return; }
 
-    const PAGE_SIZE = 50;
     const newOffset = Math.max(0, chatOffset - PAGE_SIZE);
     const baseApiUrl = import.meta.env.VITE_API_URI;
     try {
@@ -1793,6 +1872,14 @@ export default function App() {
     } finally {
       setIsLoadingOlder(false);
     }
+  };
+
+  const jumpToBottom = async () => {
+    const recent = mostRecentMessagesRef.current;
+    if (recent.length === 0) return;
+    setChatOffset(mostRecentOffsetRef.current);
+    setChatHistory(recent);
+    setIsViewingRecent(true);
   };
 
   const handleClearSession = async () => {
@@ -1968,6 +2055,11 @@ export default function App() {
   const handleNewConversation = () => {
     setCurrentConversationId(null);
     setChatHistory([]);
+    setChatOffset(0);
+    setChatTotal(0);
+    setIsViewingRecent(true);
+    mostRecentMessagesRef.current = [];
+    mostRecentOffsetRef.current = 0;
   };
 
   const handleSelectConversation = (conversationId: number) => {
@@ -1977,6 +2069,9 @@ export default function App() {
     }
     setChatOffset(0);
     setChatTotal(0);
+    setIsViewingRecent(true);
+    mostRecentMessagesRef.current = [];
+    mostRecentOffsetRef.current = 0;
     setCurrentConversationId(conversationId);
   };
 
@@ -2289,6 +2384,8 @@ export default function App() {
                   hasOlderMessages={chatOffset > 0}
                   isLoadingOlder={isLoadingOlder}
                   onLoadOlder={loadOlderMessages}
+                  isViewingRecent={isViewingRecent}
+                  onJumpToBottom={jumpToBottom}
                 />
               </>
             ) : (
