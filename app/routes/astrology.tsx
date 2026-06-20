@@ -1217,6 +1217,9 @@ const ChatInterface = ({
   response,
   progressedChecks,
   progressedTimezones,
+  hasOlderMessages,
+  isLoadingOlder,
+  onLoadOlder,
 }: any) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1387,6 +1390,19 @@ const ChatInterface = ({
         ) : (
           // Chat history mode
           <>
+            {hasOlderMessages && (
+              <div className="flex justify-center mb-3">
+                <button
+                  type="button"
+                  onClick={onLoadOlder}
+                  disabled={isLoadingOlder}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50 border border-indigo-700 hover:border-indigo-500 rounded-full px-4 py-1 transition-colors"
+                >
+                  {isLoadingOlder ? 'Loading…' : 'Load older messages'}
+                </button>
+              </div>
+            )}
+
             {messages.length === 0 && !isLoading && (
               <div className="text-center text-gray-500 italic mt-8">
                 No messages yet. Ask a question to start your chat!
@@ -1575,6 +1591,9 @@ export default function App() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [conversations, setConversations] = useState<ChatSession[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
+  const [chatOffset, setChatOffset] = useState<number>(0);
+  const [chatTotal, setChatTotal] = useState<number>(0);
+  const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
   const [encryptionEnabled, setEncryptionEnabled] = useState<boolean>(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
   const { status: encryptionStatus, hasStoredKeys, initializeWithPassphrase, unlockWithPassphrase, encryptText, decryptText } = useEncryption();
@@ -1650,6 +1669,48 @@ export default function App() {
     }
   };
 
+  const processAndSetMessages = async (
+    loadedMessages: ChatMessage[],
+    offset: number,
+    total: number,
+    prepend = false
+  ) => {
+    const process = async (msgs: ChatMessage[]) => {
+      if (encryptionEnabled && encryptionStatus === "unlocked") {
+        return Promise.all(
+          msgs.map(async (msg: ChatMessage) => {
+            if (!msg.isEncrypted || !msg.userMessageEncrypted || !msg.assistantResponseEncrypted || !msg.encryptionIVUser || !msg.encryptionIVAssistant) {
+              return msg;
+            }
+            try {
+              const [userMessage, assistantResponse] = await Promise.all([
+                decryptText(msg.userMessageEncrypted, msg.encryptionIVUser),
+                decryptText(msg.assistantResponseEncrypted, msg.encryptionIVAssistant),
+              ]);
+              return { ...msg, userMessage, assistantResponse };
+            } catch {
+              return { ...msg, userMessage: "[Unable to decrypt message]", assistantResponse: "[Unable to decrypt response]" };
+            }
+          })
+        );
+      }
+      return msgs.map((msg: ChatMessage) =>
+        msg.isEncrypted
+          ? { ...msg, userMessage: msg.userMessage || "[Encrypted message]", assistantResponse: msg.assistantResponse || "[Encrypted response]" }
+          : msg
+      );
+    };
+
+    const processed = await process(loadedMessages);
+    setChatOffset(offset);
+    setChatTotal(total);
+    if (prepend) {
+      setChatHistory((prev) => [...processed, ...prev]);
+    } else {
+      setChatHistory(processed);
+    }
+  };
+
   const loadChatHistory = async (conversationId: number) => {
     if (!conversationId || !userId) return;
 
@@ -1658,83 +1719,79 @@ export default function App() {
     if (!token) return;
 
     const baseApiUrl = import.meta.env.VITE_API_URI;
+    const PAGE_SIZE = 50;
     try {
-      const res = await fetch(
-        `${baseApiUrl}/chat/${userId}/conversation/${conversationId}?limit=100`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `${token}`,
-          },
-        }
+      // First request to get total message count
+      const firstRes = await fetch(
+        `${baseApiUrl}/chat/${userId}/conversation/${conversationId}?limit=${PAGE_SIZE}&offset=0`,
+        { headers: { 'Content-Type': 'application/json', Authorization: `${token}` } }
       );
-      if (!res.ok) throw new Error('Failed to load chat history');
-      const data = await res.json();
-      const loadedMessages = data.messages || [];
+      if (!firstRes.ok) throw new Error('Failed to load chat history');
+      const firstData = await firstRes.json();
+      const total = firstData.total || 0;
 
-      // Restore selected event/chart context for this conversation from the latest message
-      // that carries event IDs.
+      let loadedMessages = firstData.messages || [];
+      let startOffset = 0;
+
+      // If there are more messages than one page, load the last page so the user
+      // sees the most recent messages immediately.
+      if (total > PAGE_SIZE) {
+        startOffset = total - PAGE_SIZE;
+        const lastRes = await fetch(
+          `${baseApiUrl}/chat/${userId}/conversation/${conversationId}?limit=${PAGE_SIZE}&offset=${startOffset}`,
+          { headers: { 'Content-Type': 'application/json', Authorization: `${token}` } }
+        );
+        if (!lastRes.ok) throw new Error('Failed to load chat history');
+        const lastData = await lastRes.json();
+        loadedMessages = lastData.messages || [];
+      }
+
+      // Restore selected event/chart context from the latest message that carries event IDs.
       const latestWithEventIds = [...loadedMessages]
         .reverse()
-        .find(
-          (msg: ChatMessage) =>
-            Array.isArray(msg.eventIdsUsed) && msg.eventIdsUsed.length > 0
-        );
+        .find((msg: ChatMessage) => Array.isArray(msg.eventIdsUsed) && msg.eventIdsUsed.length > 0);
       if (latestWithEventIds) {
-        const restoredCheckedEvents = (latestWithEventIds.eventIdsUsed || []).reduce(
-          (acc: Record<number, boolean>, eventId: number) => {
-            acc[eventId] = true;
-            return acc;
-          },
-          {}
+        setCheckedEvents(
+          (latestWithEventIds.eventIdsUsed || []).reduce(
+            (acc: Record<number, boolean>, eventId: number) => { acc[eventId] = true; return acc; },
+            {}
+          )
         );
-        setCheckedEvents(restoredCheckedEvents);
       } else {
         setCheckedEvents({});
       }
 
-      if (encryptionEnabled && encryptionStatus === "unlocked") {
-        const decryptedMessages = await Promise.all(
-          loadedMessages.map(async (msg: ChatMessage) => {
-            if (!msg.isEncrypted) return msg;
-            if (!msg.userMessageEncrypted || !msg.assistantResponseEncrypted || !msg.encryptionIVUser || !msg.encryptionIVAssistant) {
-              return msg;
-            }
-
-            try {
-              const [userMessage, assistantResponse] = await Promise.all([
-                decryptText(msg.userMessageEncrypted, msg.encryptionIVUser),
-                decryptText(msg.assistantResponseEncrypted, msg.encryptionIVAssistant),
-              ]);
-              return { ...msg, userMessage, assistantResponse };
-            } catch {
-              return {
-                ...msg,
-                userMessage: "[Unable to decrypt message]",
-                assistantResponse: "[Unable to decrypt response]",
-              };
-            }
-          })
-        );
-        setChatHistory(decryptedMessages);
-      } else {
-        setChatHistory(
-          loadedMessages.map((msg: ChatMessage) =>
-            msg.isEncrypted
-              ? {
-                  ...msg,
-                  userMessage: msg.userMessage || "[Encrypted message]",
-                  assistantResponse: msg.assistantResponse || "[Encrypted response]",
-                }
-              : msg
-          )
-        );
-      }
+      await processAndSetMessages(loadedMessages, startOffset, total);
     } catch (err) {
       console.error('Failed to load chat history:', err);
       setChatHistory([]);
     } finally {
       setIsLoadingHistory(false);
+    }
+  };
+
+  const loadOlderMessages = async () => {
+    if (!currentConversationId || !userId || chatOffset <= 0 || isLoadingOlder) return;
+
+    setIsLoadingOlder(true);
+    const token = await getFreshToken();
+    if (!token) { setIsLoadingOlder(false); return; }
+
+    const PAGE_SIZE = 50;
+    const newOffset = Math.max(0, chatOffset - PAGE_SIZE);
+    const baseApiUrl = import.meta.env.VITE_API_URI;
+    try {
+      const res = await fetch(
+        `${baseApiUrl}/chat/${userId}/conversation/${currentConversationId}?limit=${PAGE_SIZE}&offset=${newOffset}`,
+        { headers: { 'Content-Type': 'application/json', Authorization: `${token}` } }
+      );
+      if (!res.ok) throw new Error('Failed to load older messages');
+      const data = await res.json();
+      await processAndSetMessages(data.messages || [], newOffset, data.total || chatTotal, true);
+    } catch (err) {
+      console.error('Failed to load older messages:', err);
+    } finally {
+      setIsLoadingOlder(false);
     }
   };
 
@@ -1918,6 +1975,8 @@ export default function App() {
       handleNewConversation();
       return;
     }
+    setChatOffset(0);
+    setChatTotal(0);
     setCurrentConversationId(conversationId);
   };
 
@@ -2227,6 +2286,9 @@ export default function App() {
                   response={response}
                   progressedChecks={progressedChecks}
                   progressedTimezones={progressedTimezones}
+                  hasOlderMessages={chatOffset > 0}
+                  isLoadingOlder={isLoadingOlder}
+                  onLoadOlder={loadOlderMessages}
                 />
               </>
             ) : (
