@@ -755,6 +755,7 @@ const LocationInput = ({
 // --- Main Component ---
 
 export default function ChartViewer() {
+  console.log("[ChartViewer] build-20260803-a loaded");
   const navigate = useNavigate();
   const [userId, setUserId] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState<DateTime>(DateTime.now());
@@ -883,7 +884,7 @@ export default function ChartViewer() {
         <div className="w-full max-w-6xl mx-auto bg-gray-800 rounded-xl shadow-2xl shadow-indigo-900/50 p-6 space-y-6">
           <header className="text-center border-b border-gray-700 pb-4">
             <h1 className="text-4xl font-bold font-serif tracking-wider">
-              Astrological Chart Viewer
+              Astrological Chart Viewer <span style={{fontSize:"0.6rem",opacity:0.5}}>build-20260803-a</span>
             </h1>
             <p className="text-indigo-300 mt-2">
               {currentDate.toFormat("MMMM d, yyyy - HH:mm")} · {location}
