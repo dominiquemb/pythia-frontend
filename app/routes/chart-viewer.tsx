@@ -47,6 +47,15 @@ const longitudeToAngle = (longitude: number): number => {
   return 180 + longitude;
 };
 
+const ASPECT_DISPLAY: Record<string, { symbol: string; color: string }> = {
+  conjunction: { symbol: "☌", color: "#94a3b8" },
+  opposition:  { symbol: "☍", color: "#f87171" },
+  trine:       { symbol: "△", color: "#4ade80" },
+  square:      { symbol: "□", color: "#f87171" },
+  sextile:     { symbol: "⚹", color: "#60a5fa" },
+  quincunx:    { symbol: "⊼", color: "#fb923c" },
+};
+
 // Helper: Get SVG coordinates for a point on circle
 const getPointOnCircle = (
   angle: number,
@@ -323,30 +332,55 @@ const ChartWheel = ({
           strokeWidth="2"
         />
 
+        {/* Aspect lines — rendered before planets so they sit behind */}
+        {chartData.aspects &&
+          chartData.aspects.map((asp: any, i: number) => {
+            const p1 = chartData.positions[asp.planet1];
+            const p2 = chartData.positions[asp.planet2];
+            if (!p1 || !p2) return null;
+            const innerR = radius - 100;
+            const a1 = getPointOnCircle(longitudeToAngle(p1.longitude), innerR, centerX, centerY);
+            const a2 = getPointOnCircle(longitudeToAngle(p2.longitude), innerR, centerX, centerY);
+            const display = ASPECT_DISPLAY[asp.aspect];
+            return (
+              <line
+                key={i}
+                x1={a1.x} y1={a1.y}
+                x2={a2.x} y2={a2.y}
+                stroke={display?.color ?? "#6b7280"}
+                strokeWidth="1"
+                strokeOpacity="0.55"
+              />
+            );
+          })}
+
         {/* Planets */}
         {chartData.positions &&
           Object.entries(chartData.positions).map(([name, data]: [string, any]) => {
             const angle = longitudeToAngle(data.longitude);
-            const point = getPointOnCircle(angle, radius - 75, centerX, centerY);
+            const dotPoint   = getPointOnCircle(angle, radius - 75, centerX, centerY);
+            const labelPoint = getPointOnCircle(angle, radius - 48, centerX, centerY);
+            const isRetrograde = data.speed < 0;
 
             return (
               <g key={name}>
                 <circle
-                  cx={point.x}
-                  cy={point.y}
+                  cx={dotPoint.x}
+                  cy={dotPoint.y}
                   r="8"
                   fill={getPlanetColor(name)}
                   stroke="#ffffff"
                   strokeWidth="1"
                 />
                 <text
-                  x={point.x}
-                  y={point.y + 25}
-                  fontSize="12"
+                  x={labelPoint.x}
+                  y={labelPoint.y}
+                  fontSize="11"
                   fill="#ffffff"
                   textAnchor="middle"
+                  dominantBaseline="middle"
                 >
-                  {getPlanetSymbol(name)}
+                  {getPlanetSymbol(name)}{isRetrograde ? "℞" : ""}
                 </text>
               </g>
             );
@@ -379,6 +413,106 @@ const ChartWheel = ({
           />
         )}
       </svg>
+    </div>
+  );
+};
+
+// --- Chart Summary ---
+
+const SIGN_SYMBOLS: Record<string, string> = {
+  Aries: "♈", Taurus: "♉", Gemini: "♊", Cancer: "♋",
+  Leo: "♌", Virgo: "♍", Libra: "♎", Scorpio: "♏",
+  Sagittarius: "♐", Capricorn: "♑", Aquarius: "♒", Pisces: "♓",
+};
+
+const ChartSummary = ({ chartData }: { chartData: any }) => {
+  if (!chartData) return null;
+
+  const positions = chartData.positions ?? {};
+  const aspects: any[] = chartData.aspects ?? [];
+
+  return (
+    <div className="mt-4 space-y-5 text-sm">
+      {/* Planetary positions */}
+      <div>
+        <h2 className="text-base font-semibold text-indigo-300 mb-2 border-b border-gray-700 pb-1">
+          Planetary Positions
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-gray-400 text-xs uppercase tracking-wide">
+                <th className="py-1 pr-4">Planet</th>
+                <th className="py-1 pr-4">Sign</th>
+                <th className="py-1 pr-4">Degree</th>
+                <th className="py-1 pr-4">House</th>
+                <th className="py-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(positions).map(([name, data]: [string, any]) => {
+                const isRetrograde = data.speed < 0;
+                const deg = typeof data.sign_degrees === "number"
+                  ? data.sign_degrees.toFixed(2)
+                  : "—";
+                return (
+                  <tr key={name} className="border-t border-gray-700/50 hover:bg-gray-700/30 transition-colors">
+                    <td className="py-1.5 pr-4 font-medium" style={{ color: getPlanetColor(name) }}>
+                      {getPlanetSymbol(name)} {name}
+                    </td>
+                    <td className="py-1.5 pr-4 text-gray-200">
+                      {SIGN_SYMBOLS[data.sign] ?? ""} {data.sign ?? "—"}
+                    </td>
+                    <td className="py-1.5 pr-4 text-gray-300">{deg}°</td>
+                    <td className="py-1.5 pr-4 text-gray-400">
+                      {data.house != null ? `House ${data.house}` : "—"}
+                    </td>
+                    <td className="py-1.5">
+                      {isRetrograde
+                        ? <span className="text-amber-400 font-semibold">℞ Retrograde</span>
+                        : <span className="text-gray-500">Direct</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Aspects */}
+      {aspects.length > 0 && (
+        <div>
+          <h2 className="text-base font-semibold text-indigo-300 mb-2 border-b border-gray-700 pb-1">
+            Aspects
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+            {aspects.map((asp, i) => {
+              const display = ASPECT_DISPLAY[asp.aspect];
+              return (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 px-2 py-1 rounded bg-gray-700/40 border border-gray-700/60"
+                >
+                  <span className="text-base leading-none" style={{ color: display?.color ?? "#9ca3af" }}>
+                    {display?.symbol ?? asp.aspect[0]}
+                  </span>
+                  <span className="text-gray-200">
+                    <span style={{ color: getPlanetColor(asp.planet1) }}>{getPlanetSymbol(asp.planet1)}</span>
+                    {" "}{asp.planet1}
+                  </span>
+                  <span className="text-gray-500 text-xs capitalize">{asp.aspect}</span>
+                  <span className="text-gray-200">
+                    <span style={{ color: getPlanetColor(asp.planet2) }}>{getPlanetSymbol(asp.planet2)}</span>
+                    {" "}{asp.planet2}
+                  </span>
+                  <span className="ml-auto text-gray-500 text-xs">{asp.orb.toFixed(1)}°</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -733,6 +867,8 @@ export default function ChartViewer() {
           )}
 
           <ChartWheel chartData={chartData} isLoading={isLoading} />
+
+          {!isLoading && chartData && <ChartSummary chartData={chartData} />}
 
           <DateSlider
             value={sliderValue}
