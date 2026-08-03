@@ -1317,6 +1317,223 @@ const EventConfigSection = ({
 };
 
 
+// Parse AI response text and turn date strings into clickable links
+function parseDateLinks(
+  text: string,
+  onDateClick: (date: DateTime) => void
+): React.ReactNode[] {
+  // Matches: 2026-01-15, January 15, 2026, Jan 15, 2026, January 15 2026
+  const DATE_RE = /\b(\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b|\b((?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})\b/gi;
+
+  const lines = text.split('\n');
+  const nodes: React.ReactNode[] = [];
+
+  lines.forEach((line, li) => {
+    if (li > 0) nodes.push(<br key={`br-${li}`} />);
+    const matches: { start: number; end: number; dateStr: string }[] = [];
+    let m: RegExpExecArray | null;
+    DATE_RE.lastIndex = 0;
+    while ((m = DATE_RE.exec(line)) !== null) {
+      matches.push({ start: m.index, end: m.index + m[0].length, dateStr: m[0] });
+    }
+    if (matches.length === 0) { nodes.push(line); return; }
+    let pos = 0;
+    matches.forEach((match, mi) => {
+      if (match.start > pos) nodes.push(line.slice(pos, match.start));
+      const parsed =
+        DateTime.fromISO(match.dateStr).isValid
+          ? DateTime.fromISO(match.dateStr)
+          : DateTime.fromFormat(match.dateStr.replace(',', ''), 'MMMM d yyyy').isValid
+          ? DateTime.fromFormat(match.dateStr.replace(',', ''), 'MMMM d yyyy')
+          : DateTime.fromFormat(match.dateStr.replace(',', ''), 'MMM d yyyy').isValid
+          ? DateTime.fromFormat(match.dateStr.replace(',', ''), 'MMM d yyyy')
+          : null;
+      if (parsed && parsed.isValid) {
+        nodes.push(
+          <button
+            key={`d-${li}-${mi}`}
+            type="button"
+            onClick={() => onDateClick(parsed)}
+            className="text-indigo-400 hover:text-indigo-200 underline decoration-dotted cursor-pointer bg-transparent border-0 p-0 font-[inherit] text-[inherit]"
+            title={`View sky chart for ${parsed.toFormat('MMMM d, yyyy')}`}
+          >
+            {match.dateStr}
+          </button>
+        );
+      } else {
+        nodes.push(match.dateStr);
+      }
+      pos = match.end;
+    });
+    if (pos < line.length) nodes.push(line.slice(pos));
+  });
+
+  return nodes;
+}
+
+// Slide-in drawer showing the ephemeris wheel for any date
+const EphemerisDrawer = ({
+  isOpen,
+  onClose,
+  date,
+  onDateChange,
+  transitRange,
+  userId,
+  getFreshToken,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  date: DateTime;
+  onDateChange: (d: DateTime) => void;
+  transitRange: { start: string; end: string } | null;
+  userId: string | null;
+  getFreshToken: () => Promise<string | null>;
+}) => {
+  const [chartData, setChartData] = useState<any>(null);
+  const [isLoadingChart, setIsLoadingChart] = useState(false);
+  const baseApiUrl = import.meta.env.VITE_API_URI;
+
+  const rangeStart = transitRange
+    ? DateTime.fromISO(transitRange.start)
+    : DateTime.now().minus({ days: 30 });
+  const rangeEnd = transitRange
+    ? DateTime.fromISO(transitRange.end)
+    : DateTime.now().plus({ days: 30 });
+  const totalDays = Math.max(1, Math.round(rangeEnd.diff(rangeStart, 'days').days));
+  const sliderValue = Math.max(0, Math.min(totalDays, Math.round(date.diff(rangeStart, 'days').days)));
+
+  useEffect(() => {
+    if (!isOpen || !userId) return;
+    const timer = setTimeout(async () => {
+      setIsLoadingChart(true);
+      const token = await getFreshToken();
+      if (!token) { setIsLoadingChart(false); return; }
+      try {
+        const res = await fetch(`${baseApiUrl}/ephemeris`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: token },
+          body: JSON.stringify({
+            userId,
+            year: date.year, month: date.month, day: date.day,
+            time: '12:00',
+            location: 'Greenwich, UK',
+            houseSystem: 'P',
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) setChartData(data);
+      } catch (e) {
+        console.error('Drawer ephemeris error:', e);
+      } finally {
+        setIsLoadingChart(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [date, isOpen, userId]);
+
+  return (
+    <>
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30"
+          onClick={onClose}
+        />
+      )}
+      <div
+        className="fixed top-0 right-0 h-full w-full sm:w-[620px] bg-gray-900 border-l border-gray-700 z-40 shadow-2xl flex flex-col overflow-y-auto"
+        style={{
+          transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 0.3s ease-in-out',
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700 flex-shrink-0 sticky top-0 bg-gray-900 z-10">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Sky Chart</h2>
+            <p className="text-sm text-indigo-300">{date.toFormat('EEEE, MMMM d, yyyy')}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-gray-800"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Wheel */}
+        <div className="p-4 flex-shrink-0">
+          <ChartWheel chartData={chartData} isLoading={isLoadingChart} />
+        </div>
+
+        {/* Slider */}
+        <div className="px-5 pb-5 flex-shrink-0 space-y-3">
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>{rangeStart.toFormat('MMM d, yyyy')}</span>
+            <span className="text-indigo-400 font-medium">{date.toFormat('MMM d, yyyy')}</span>
+            <span>{rangeEnd.toFormat('MMM d, yyyy')}</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={totalDays}
+            value={sliderValue}
+            onChange={(e) =>
+              onDateChange(rangeStart.plus({ days: parseInt(e.target.value) }))
+            }
+            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+          />
+          {transitRange ? (
+            <p className="text-xs text-gray-500 text-center">
+              Transit range: {transitRange.start} → {transitRange.end}
+            </p>
+          ) : (
+            <p className="text-xs text-gray-500 text-center">±30 days from today</p>
+          )}
+        </div>
+
+        {/* Planetary positions table */}
+        {chartData && !isLoadingChart && (
+          <div className="px-5 pb-6 flex-shrink-0">
+            <h3 className="text-sm font-semibold text-indigo-300 mb-2 border-b border-gray-700 pb-1">
+              Planetary Positions
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="text-gray-500 uppercase tracking-wide">
+                    <th className="py-1 pr-3">Planet</th>
+                    <th className="py-1 pr-3">Sign</th>
+                    <th className="py-1 pr-3">Degree</th>
+                    <th className="py-1">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(chartData.positions ?? {}).map(([name, data]: [string, any]) => (
+                    <tr key={name} className="border-t border-gray-700/40 hover:bg-gray-800/40">
+                      <td className="py-1 pr-3 font-medium" style={{ color: getPlanetColor(name) }}>
+                        {getPlanetSymbol(name)} {name}
+                      </td>
+                      <td className="py-1 pr-3 text-gray-200">{data.sign ?? '—'}</td>
+                      <td className="py-1 pr-3 text-gray-300">
+                        {typeof data.sign_degrees === 'number' ? data.sign_degrees.toFixed(2) : '—'}°
+                      </td>
+                      <td className="py-1">
+                        {data.speed < 0
+                          ? <span className="text-amber-400">℞ Retro</span>
+                          : <span className="text-gray-500">Direct</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
+
 const ChatInterface = ({
   messages,
   conversations,
@@ -1341,12 +1558,19 @@ const ChatInterface = ({
   onLoadOlder,
   isViewingRecent,
   onJumpToBottom,
+  userId,
+  getFreshToken,
 }: any) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevScrollHeightRef = useRef<number>(0);
   const isLoadingOlderRef = useRef<boolean>(false);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+
+  // Ephemeris drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerDate, setDrawerDate] = useState<DateTime>(DateTime.now());
+  const [lastTransitRange, setLastTransitRange] = useState<{ start: string; end: string } | null>(null);
   const [userQuestion, setUserQuestion] = useState("");
   const [includeTransits, setIncludeTransits] = useState(true);
   const [transitRangeStart, setTransitRangeStart] = useState(
@@ -1440,19 +1664,46 @@ const ChatInterface = ({
       ...(attachedFiles.length && { files: attachedFiles.map(({ mimeType, data }) => ({ mimeType, data })) }),
     };
 
+    if (queryPayload.transitRange) {
+      setLastTransitRange(queryPayload.transitRange);
+    }
     onSubmit(queryPayload);
     setUserQuestion("");
     setAttachedFiles([]);
   };
 
+  const openDrawerForDate = (date: DateTime) => {
+    setDrawerDate(date);
+    setDrawerOpen(true);
+  };
+
   return (
     <div className="p-6 md:p-8 bg-gray-800/50 flex flex-col" style={{ minHeight: '500px' }}>
+      {/* Ephemeris Drawer */}
+      <EphemerisDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        date={drawerDate}
+        onDateChange={setDrawerDate}
+        transitRange={lastTransitRange}
+        userId={userId}
+        getFreshToken={getFreshToken}
+      />
+
       {/* Header */}
       <div className="flex justify-between items-center mb-4 border-b border-gray-600 pb-2">
         <h2 className="text-2xl font-semibold text-white">
           {singleResponseMode ? "Response" : "Chat History"}
         </h2>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen((o) => !o)}
+            className="text-sm px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-indigo-300 hover:text-indigo-200 border border-gray-600 transition-colors"
+            title="View sky chart"
+          >
+            ☽ Sky Chart
+          </button>
           {!singleResponseMode && (
             <>
               <button
@@ -1546,12 +1797,9 @@ const ChatInterface = ({
             )}
             {response && (
               <div className="bg-gray-700 text-gray-200 rounded-lg px-4 py-3">
-                <div
-                  className="prose prose-invert prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{
-                    __html: response.replace(/\n/g, '<br />')
-                  }}
-                />
+                <div className="prose prose-invert prose-sm max-w-none">
+                  {parseDateLinks(response, openDrawerForDate)}
+                </div>
               </div>
             )}
           </>
@@ -1582,12 +1830,9 @@ const ChatInterface = ({
                 {/* Assistant response */}
                 <div className="flex justify-start">
                   <div className="bg-gray-700 text-gray-200 rounded-lg px-4 py-3 max-w-[80%]">
-                    <div
-                      className="prose prose-invert prose-sm max-w-none"
-                      dangerouslySetInnerHTML={{
-                        __html: (msg.assistantResponse || "").replace(/\n/g, '<br />')
-                      }}
-                    />
+                    <div className="prose prose-invert prose-sm max-w-none">
+                      {parseDateLinks(msg.assistantResponse || "", openDrawerForDate)}
+                    </div>
                   </div>
                 </div>
 
@@ -2554,6 +2799,8 @@ export default function App() {
                   onLoadOlder={loadOlderMessages}
                   isViewingRecent={isViewingRecent}
                   onJumpToBottom={jumpToBottom}
+                  userId={userId}
+                  getFreshToken={getFreshToken}
                 />
               </>
             ) : (
