@@ -437,7 +437,7 @@ const ChartWheel = ({
                 <circle cx={dot.x} cy={dot.y} r="10"
                   fill={getPlanetColor(name)} stroke="#ffffff" strokeWidth="1" />
                 <text x={label.x} y={label.y}
-                  fontSize="14" fill="#ffffff"
+                  fontSize="22" fill="#ffffff"
                   textAnchor="middle" dominantBaseline="middle" fontWeight="bold">
                   {getPlanetSymbol(name)}{isRetrograde ? "℞" : ""}
                 </text>
