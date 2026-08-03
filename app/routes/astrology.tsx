@@ -209,6 +209,10 @@ const Header = () => (
 
 // --- Chart Viewer Components ---
 
+const ELEMENT_COLOR_MAP: Record<string, string> = {
+  fire: "#ef4444", earth: "#10b981", air: "#f59e0b", water: "#8b5cf6",
+};
+
 const ZodiacRing = ({
   centerX,
   centerY,
@@ -219,60 +223,80 @@ const ZodiacRing = ({
   radius: number;
 }) => {
   const zodiacSigns = [
-    { name: "Aries", symbol: "♈", color: "#ef4444" },
-    { name: "Taurus", symbol: "♉", color: "#10b981" },
-    { name: "Gemini", symbol: "♊", color: "#f59e0b" },
-    { name: "Cancer", symbol: "♋", color: "#8b5cf6" },
-    { name: "Leo", symbol: "♌", color: "#f59e0b" },
-    { name: "Virgo", symbol: "♍", color: "#10b981" },
-    { name: "Libra", symbol: "♎", color: "#ef4444" },
-    { name: "Scorpio", symbol: "♏", color: "#8b5cf6" },
-    { name: "Sagittarius", symbol: "♐", color: "#f59e0b" },
-    { name: "Capricorn", symbol: "♑", color: "#10b981" },
-    { name: "Aquarius", symbol: "♒", color: "#ef4444" },
-    { name: "Pisces", symbol: "♓", color: "#8b5cf6" },
+    { name: "Aries",       symbol: "♈", color: "#ef4444", element: "fire"  },
+    { name: "Taurus",      symbol: "♉", color: "#10b981", element: "earth" },
+    { name: "Gemini",      symbol: "♊", color: "#f59e0b", element: "air"   },
+    { name: "Cancer",      symbol: "♋", color: "#8b5cf6", element: "water" },
+    { name: "Leo",         symbol: "♌", color: "#f59e0b", element: "fire"  },
+    { name: "Virgo",       symbol: "♍", color: "#10b981", element: "earth" },
+    { name: "Libra",       symbol: "♎", color: "#ef4444", element: "air"   },
+    { name: "Scorpio",     symbol: "♏", color: "#8b5cf6", element: "water" },
+    { name: "Sagittarius", symbol: "♐", color: "#f59e0b", element: "fire"  },
+    { name: "Capricorn",   symbol: "♑", color: "#10b981", element: "earth" },
+    { name: "Aquarius",    symbol: "♒", color: "#ef4444", element: "air"   },
+    { name: "Pisces",      symbol: "♓", color: "#8b5cf6", element: "water" },
   ];
+
+  const bandInnerR = radius - 40;
 
   return (
     <g>
+      {/* Pie slices per sign for element-coloured band */}
       {zodiacSigns.map((sign, index) => {
         const startAngle = 180 + index * 30;
-        const endAngle = startAngle + 30;
-        const midAngle = startAngle + 15;
-
-        const startPoint = getPointOnCircle(startAngle, radius, centerX, centerY);
-        const endPoint = getPointOnCircle(endAngle, radius, centerX, centerY);
-        const largeArc = 0;
-
+        const endAngle   = startAngle + 30;
+        const s = getPointOnCircle(startAngle, radius, centerX, centerY);
+        const e = getPointOnCircle(endAngle,   radius, centerX, centerY);
         return (
-          <g key={sign.name}>
-            <path
-              d={`M ${startPoint.x} ${startPoint.y} A ${radius} ${radius} 0 ${largeArc} 0 ${endPoint.x} ${endPoint.y}`}
-              fill="none"
-              stroke="#4b5563"
-              strokeWidth="2"
-            />
-            <text
-              x={getPointOnCircle(midAngle, radius + 20, centerX, centerY).x}
-              y={getPointOnCircle(midAngle, radius + 20, centerX, centerY).y}
-              fontSize="24"
-              fill={sign.color}
-              textAnchor="middle"
-              dominantBaseline="middle"
-            >
-              {sign.symbol}
-            </text>
-          </g>
+          <path
+            key={`slice-${sign.name}`}
+            d={`M ${centerX} ${centerY} L ${s.x} ${s.y} A ${radius} ${radius} 0 0 0 ${e.x} ${e.y} Z`}
+            fill={ELEMENT_COLOR_MAP[sign.element]}
+            fillOpacity="0.28"
+            stroke="none"
+          />
         );
       })}
-      <circle
-        cx={centerX}
-        cy={centerY}
-        r={radius}
-        fill="none"
-        stroke="#4b5563"
-        strokeWidth="3"
-      />
+
+      {/* Mask the inner area back to dark */}
+      <circle cx={centerX} cy={centerY} r={bandInnerR} fill="#111827" stroke="none" />
+
+      {/* Divider lines at each sign boundary */}
+      {zodiacSigns.map((sign, index) => {
+        const angle = 180 + index * 30;
+        const inner = getPointOnCircle(angle, bandInnerR, centerX, centerY);
+        const outer = getPointOnCircle(angle, radius,     centerX, centerY);
+        return (
+          <line
+            key={`div-${sign.name}`}
+            x1={inner.x} y1={inner.y}
+            x2={outer.x} y2={outer.y}
+            stroke="#ffffff"
+            strokeWidth="2"
+          />
+        );
+      })}
+
+      {/* Sign symbols */}
+      {zodiacSigns.map((sign, index) => {
+        const midAngle = 180 + index * 30 + 15;
+        const pt = getPointOnCircle(midAngle, radius + 18, centerX, centerY);
+        return (
+          <text
+            key={`sym-${sign.name}`}
+            x={pt.x} y={pt.y}
+            fontSize="20"
+            fill={sign.color}
+            textAnchor="middle"
+            dominantBaseline="middle"
+          >
+            {sign.symbol}
+          </text>
+        );
+      })}
+
+      <circle cx={centerX} cy={centerY} r={radius}     fill="none" stroke="#6b7280" strokeWidth="2" />
+      <circle cx={centerX} cy={centerY} r={bandInnerR} fill="none" stroke="#6b7280" strokeWidth="1.5" />
     </g>
   );
 };
@@ -381,30 +405,41 @@ const ChartWheel = ({
           strokeWidth="2"
         />
 
+        {/* Aspect lines — behind planets */}
+        {chartData.aspects && chartData.aspects.map((asp: any, i: number) => {
+          const p1 = chartData.positions?.[asp.planet1];
+          const p2 = chartData.positions?.[asp.planet2];
+          if (!p1 || !p2) return null;
+          const innerR = radius - 100;
+          const a1 = getPointOnCircle(longitudeToAngle(p1.longitude), innerR, centerX, centerY);
+          const a2 = getPointOnCircle(longitudeToAngle(p2.longitude), innerR, centerX, centerY);
+          const aspectColors: Record<string, string> = {
+            conjunction: "#94a3b8", opposition: "#f87171", trine: "#4ade80",
+            square: "#f87171", sextile: "#60a5fa", quincunx: "#fb923c",
+          };
+          return (
+            <line key={i} x1={a1.x} y1={a1.y} x2={a2.x} y2={a2.y}
+              stroke={aspectColors[asp.aspect] ?? "#6b7280"}
+              strokeWidth="1" strokeOpacity="0.55" />
+          );
+        })}
+
+        {/* Planets */}
         {chartData.positions &&
           Object.entries(chartData.positions).map(([name, data]: [string, any]) => {
             const angle = longitudeToAngle(data.longitude);
-            const point = getPointOnCircle(angle, radius - 75, centerX, centerY);
+            const dot   = getPointOnCircle(angle, radius - 75, centerX, centerY);
+            const label = getPointOnCircle(angle, radius - 48, centerX, centerY);
+            const isRetrograde = data.speed < 0;
 
             return (
               <g key={name}>
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  r="10"
-                  fill={getPlanetColor(name)}
-                  stroke="#ffffff"
-                  strokeWidth="1"
-                />
-                <text
-                  x={point.x}
-                  y={point.y + 30}
-                  fontSize="20"
-                  fill="#ffffff"
-                  textAnchor="middle"
-                  fontWeight="bold"
-                >
-                  {getPlanetSymbol(name)}
+                <circle cx={dot.x} cy={dot.y} r="10"
+                  fill={getPlanetColor(name)} stroke="#ffffff" strokeWidth="1" />
+                <text x={label.x} y={label.y}
+                  fontSize="14" fill="#ffffff"
+                  textAnchor="middle" dominantBaseline="middle" fontWeight="bold">
+                  {getPlanetSymbol(name)}{isRetrograde ? "℞" : ""}
                 </text>
               </g>
             );
@@ -733,6 +768,77 @@ const ChartViewerTab = ({
       )}
 
       <ChartWheel chartData={chartData} isLoading={isLoading} />
+
+      {!isLoading && chartData && (
+        <div className="mt-4 space-y-5 text-sm">
+          <div>
+            <h2 className="text-base font-semibold text-indigo-300 mb-2 border-b border-gray-700 pb-1">Planetary Positions</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-gray-400 text-xs uppercase tracking-wide">
+                    <th className="py-1 pr-4">Planet</th>
+                    <th className="py-1 pr-4">Sign</th>
+                    <th className="py-1 pr-4">Degree</th>
+                    <th className="py-1 pr-4">House</th>
+                    <th className="py-1">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(chartData.positions ?? {}).map(([name, data]: [string, any]) => (
+                    <tr key={name} className="border-t border-gray-700/50 hover:bg-gray-700/30">
+                      <td className="py-1.5 pr-4 font-medium" style={{ color: getPlanetColor(name) }}>
+                        {getPlanetSymbol(name)} {name}
+                      </td>
+                      <td className="py-1.5 pr-4 text-gray-200">{data.sign ?? "—"}</td>
+                      <td className="py-1.5 pr-4 text-gray-300">
+                        {typeof data.sign_degrees === "number" ? data.sign_degrees.toFixed(2) : "—"}°
+                      </td>
+                      <td className="py-1.5 pr-4 text-gray-400">
+                        {data.house != null ? `House ${data.house}` : "—"}
+                      </td>
+                      <td className="py-1.5">
+                        {data.speed < 0
+                          ? <span className="text-amber-400 font-semibold">℞ Retrograde</span>
+                          : <span className="text-gray-500">Direct</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {chartData.aspects?.length > 0 && (
+            <div>
+              <h2 className="text-base font-semibold text-indigo-300 mb-2 border-b border-gray-700 pb-1">Aspects</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                {chartData.aspects.map((asp: any, i: number) => {
+                  const aspectSymbols: Record<string, string> = {
+                    conjunction: "☌", opposition: "☍", trine: "△",
+                    square: "□", sextile: "⚹", quincunx: "⊼",
+                  };
+                  const aspectColors: Record<string, string> = {
+                    conjunction: "#94a3b8", opposition: "#f87171", trine: "#4ade80",
+                    square: "#f87171", sextile: "#60a5fa", quincunx: "#fb923c",
+                  };
+                  return (
+                    <div key={i} className="flex items-center gap-2 px-2 py-1 rounded bg-gray-700/40 border border-gray-700/60">
+                      <span style={{ color: aspectColors[asp.aspect] ?? "#9ca3af" }}>
+                        {aspectSymbols[asp.aspect] ?? asp.aspect[0]}
+                      </span>
+                      <span style={{ color: getPlanetColor(asp.planet1) }}>{getPlanetSymbol(asp.planet1)}</span>
+                      <span className="text-gray-400 text-xs capitalize">{asp.aspect}</span>
+                      <span style={{ color: getPlanetColor(asp.planet2) }}>{getPlanetSymbol(asp.planet2)}</span>
+                      <span className="ml-auto text-gray-500 text-xs">{asp.orb.toFixed(1)}°</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <DateSlider
         dayOffset={selectedDayOffset}
