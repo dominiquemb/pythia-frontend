@@ -1208,10 +1208,12 @@ const EventList = ({
 const TransitOptions = ({
   includeTransits,
   setIncludeTransits,
-  transitTimestamp,
-  setTransitTimestamp,
+  transitRangeStart,
+  setTransitRangeStart,
+  transitRangeEnd,
+  setTransitRangeEnd,
 }) => (
-  <div className="p-3 bg-gray-700/50 rounded-lg flex items-center gap-4">
+  <div className="p-3 bg-gray-700/50 rounded-lg flex flex-wrap items-center gap-3">
     <label className="flex items-center space-x-2 text-sm text-gray-200">
       <input
         type="checkbox"
@@ -1219,15 +1221,26 @@ const TransitOptions = ({
         onChange={(e) => setIncludeTransits(e.target.checked)}
         className="rounded bg-gray-600 border-gray-500 text-indigo-500"
       />
-      <span>Include Transits for</span>
+      <span>Include Transits</span>
     </label>
-    <input
-      type="datetime-local"
-      value={transitTimestamp}
-      onChange={(e) => setTransitTimestamp(e.target.value)}
-      disabled={!includeTransits}
-      className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-sm disabled:opacity-50"
-    />
+    <div className="flex items-center gap-2 text-sm text-gray-300">
+      <span>from</span>
+      <input
+        type="date"
+        value={transitRangeStart}
+        onChange={(e) => setTransitRangeStart(e.target.value)}
+        disabled={!includeTransits}
+        className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-sm disabled:opacity-50"
+      />
+      <span>to</span>
+      <input
+        type="date"
+        value={transitRangeEnd}
+        onChange={(e) => setTransitRangeEnd(e.target.value)}
+        disabled={!includeTransits}
+        className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-sm disabled:opacity-50"
+      />
+    </div>
   </div>
 );
 
@@ -1336,8 +1349,11 @@ const ChatInterface = ({
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const [userQuestion, setUserQuestion] = useState("");
   const [includeTransits, setIncludeTransits] = useState(true);
-  const [transitTimestamp, setTransitTimestamp] = useState(
-    DateTime.now().toFormat("yyyy-MM-dd'T'HH:mm")
+  const [transitRangeStart, setTransitRangeStart] = useState(
+    DateTime.now().toFormat("yyyy-MM-dd")
+  );
+  const [transitRangeEnd, setTransitRangeEnd] = useState(
+    DateTime.now().plus({ weeks: 1 }).toFormat("yyyy-MM-dd")
   );
   const [attachedFiles, setAttachedFiles] = useState<{ mimeType: string; data: string; previewUrl: string; fileName: string }[]>([]);
 
@@ -1418,8 +1434,8 @@ const ChatInterface = ({
       progressed: progressedEventIds.length > 0,
       progressedEventIds,
       progressedTimezones,
-      transitTimestamp: includeTransits
-        ? DateTime.fromISO(transitTimestamp).toISO()
+      transitRange: includeTransits
+        ? { start: transitRangeStart, end: transitRangeEnd }
         : null,
       ...(attachedFiles.length && { files: attachedFiles.map(({ mimeType, data }) => ({ mimeType, data })) }),
     };
@@ -1702,7 +1718,7 @@ const ChatInterface = ({
             <span>Single response mode</span>
           </label>
 
-          <div className="flex items-center gap-2 text-gray-300">
+          <div className="flex flex-wrap items-center gap-2 text-gray-300">
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -1713,12 +1729,22 @@ const ChatInterface = ({
               <span>Include transits</span>
             </label>
             {includeTransits && (
-              <input
-                type="datetime-local"
-                value={transitTimestamp}
-                onChange={(e) => setTransitTimestamp(e.target.value)}
-                className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white"
-              />
+              <>
+                <span className="text-sm">from</span>
+                <input
+                  type="date"
+                  value={transitRangeStart}
+                  onChange={(e) => setTransitRangeStart(e.target.value)}
+                  className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white"
+                />
+                <span className="text-sm">to</span>
+                <input
+                  type="date"
+                  value={transitRangeEnd}
+                  onChange={(e) => setTransitRangeEnd(e.target.value)}
+                  className="p-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white"
+                />
+              </>
             )}
           </div>
         </div>
@@ -2329,8 +2355,43 @@ export default function App() {
             `User: ${entry.userMessage}\nYour reply: ${entry.assistantResponse}`
         );
 
+      // Pre-fetch transit range data in chunks if a range is specified.
+      // This supports arbitrarily long date ranges without backend timeout risk.
+      let prefetchedTransitTable = "";
+      if (queryPayload.transitRange?.start && queryPayload.transitRange?.end) {
+        const CHUNK_SIZE = 365; // days per request
+        let offset = 0;
+        let hasMore = true;
+        const tableParts: string[] = [];
+
+        while (hasMore) {
+          const chunkRes = await fetch(`${baseApiUrl}/transit-range`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `${token}` },
+            body: JSON.stringify({
+              userId,
+              start: queryPayload.transitRange.start,
+              end: queryPayload.transitRange.end,
+              offset,
+              limit: CHUNK_SIZE,
+            }),
+          });
+          if (!chunkRes.ok) break;
+          const chunkData = await chunkRes.json();
+          const lines = chunkData.table?.split("\n") || [];
+          // Skip the header row on subsequent chunks
+          tableParts.push(offset === 0 ? lines.join("\n") : lines.slice(1).join("\n"));
+          hasMore = chunkData.hasMore;
+          offset += CHUNK_SIZE;
+        }
+
+        if (tableParts.length > 0) {
+          prefetchedTransitTable = `\n\n**Transit Positions (${queryPayload.transitRange.start} to ${queryPayload.transitRange.end}, noon UT each day):**\n\`\`\`\n${tableParts.join("\n")}\n\`\`\``;
+        }
+      }
+
       const allContextBlocks = [...historyBlocks, `User: ${queryPayload.userQuestion}`];
-      const finalUserMessageForModel = `Context:\n${allContextBlocks.join("\n----\n")}`;
+      const finalUserMessageForModel = `Context:\n${allContextBlocks.join("\n----\n")}${prefetchedTransitTable}`;
 
       const requestBody = {
         userId,
@@ -2341,7 +2402,8 @@ export default function App() {
         progressed: queryPayload.progressed,
         progressedEventIds: queryPayload.progressedEventIds,
         progressedTimezones: queryPayload.progressedTimezones,
-        transitTimestamp: queryPayload.transitTimestamp,
+        // Only send transitRange if pre-fetch failed (fallback to backend calculation)
+        transitRange: prefetchedTransitTable ? null : queryPayload.transitRange,
         ...(queryPayload.imageData && { imageData: queryPayload.imageData }),
         ...(!singleResponseMode && {
           conversationId: resolvedConversationId,
@@ -2389,7 +2451,7 @@ export default function App() {
               encryptionIVAssistant: encryptedAssistant.iv,
               eventIdsUsed: selectedEventIds,
               queryMetadata: {
-                transitTimestamp: queryPayload.transitTimestamp,
+                transitRange: queryPayload.transitRange,
                 progressed: queryPayload.progressed,
                 progressedEventIds: queryPayload.progressedEventIds,
                 progressedTimezones: queryPayload.progressedTimezones,
