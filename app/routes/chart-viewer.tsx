@@ -146,6 +146,13 @@ const HamburgerMenu = ({ onLogout }: { onLogout: () => void }) => {
 
 // --- Chart Components ---
 
+const ELEMENT_FILL: Record<string, string> = {
+  fire:  "rgba(239,68,68,0.18)",
+  earth: "rgba(16,185,129,0.15)",
+  air:   "rgba(245,158,11,0.15)",
+  water: "rgba(139,92,246,0.18)",
+};
+
 const ZodiacRing = ({
   centerX,
   centerY,
@@ -156,47 +163,62 @@ const ZodiacRing = ({
   radius: number;
 }) => {
   const zodiacSigns = [
-    { name: "Aries", symbol: "♈", color: "#ef4444" },
-    { name: "Taurus", symbol: "♉", color: "#10b981" },
-    { name: "Gemini", symbol: "♊", color: "#f59e0b" },
-    { name: "Cancer", symbol: "♋", color: "#8b5cf6" },
-    { name: "Leo", symbol: "♌", color: "#f59e0b" },
-    { name: "Virgo", symbol: "♍", color: "#10b981" },
-    { name: "Libra", symbol: "♎", color: "#ef4444" },
-    { name: "Scorpio", symbol: "♏", color: "#8b5cf6" },
-    { name: "Sagittarius", symbol: "♐", color: "#f59e0b" },
-    { name: "Capricorn", symbol: "♑", color: "#10b981" },
-    { name: "Aquarius", symbol: "♒", color: "#ef4444" },
-    { name: "Pisces", symbol: "♓", color: "#8b5cf6" },
+    { name: "Aries",       symbol: "♈", color: "#ef4444", element: "fire"  },
+    { name: "Taurus",      symbol: "♉", color: "#10b981", element: "earth" },
+    { name: "Gemini",      symbol: "♊", color: "#f59e0b", element: "air"   },
+    { name: "Cancer",      symbol: "♋", color: "#8b5cf6", element: "water" },
+    { name: "Leo",         symbol: "♌", color: "#f59e0b", element: "fire"  },
+    { name: "Virgo",       symbol: "♍", color: "#10b981", element: "earth" },
+    { name: "Libra",       symbol: "♎", color: "#ef4444", element: "air"   },
+    { name: "Scorpio",     symbol: "♏", color: "#8b5cf6", element: "water" },
+    { name: "Sagittarius", symbol: "♐", color: "#f59e0b", element: "fire"  },
+    { name: "Capricorn",   symbol: "♑", color: "#10b981", element: "earth" },
+    { name: "Aquarius",    symbol: "♒", color: "#ef4444", element: "air"   },
+    { name: "Pisces",      symbol: "♓", color: "#8b5cf6", element: "water" },
   ];
+
+  // The zodiac band occupies the ring between innerR and radius.
+  const innerR = radius - 40;
 
   return (
     <g>
       {zodiacSigns.map((sign, index) => {
         const startAngle = 180 + index * 30;
-        const endAngle = startAngle + 30;
-        const midAngle = startAngle + 15;
+        const endAngle   = startAngle + 30;
+        const midAngle   = startAngle + 15;
 
-        // Draw arc segment
-        const startPoint = getPointOnCircle(startAngle, radius, centerX, centerY);
-        const endPoint = getPointOnCircle(endAngle, radius, centerX, centerY);
-        const largeArc = 0; // 30° is always a small arc
+        const outerStart = getPointOnCircle(startAngle, radius,  centerX, centerY);
+        const outerEnd   = getPointOnCircle(endAngle,   radius,  centerX, centerY);
+        const innerStart = getPointOnCircle(startAngle, innerR,  centerX, centerY);
+        const innerEnd   = getPointOnCircle(endAngle,   innerR,  centerX, centerY);
+
+        // Filled ring-segment path (outer arc → line in → inner arc back → close)
+        const segPath = [
+          `M ${outerStart.x} ${outerStart.y}`,
+          `A ${radius} ${radius} 0 0 0 ${outerEnd.x} ${outerEnd.y}`,
+          `L ${innerEnd.x} ${innerEnd.y}`,
+          `A ${innerR} ${innerR} 0 0 1 ${innerStart.x} ${innerStart.y}`,
+          `Z`,
+        ].join(" ");
 
         return (
           <g key={sign.name}>
-            {/* Arc path */}
-            <path
-              d={`M ${startPoint.x} ${startPoint.y} A ${radius} ${radius} 0 ${largeArc} 0 ${endPoint.x} ${endPoint.y}`}
-              fill="none"
-              stroke="#4b5563"
-              strokeWidth="2"
+            {/* Filled element-coloured band segment */}
+            <path d={segPath} fill={ELEMENT_FILL[sign.element]} stroke="none" />
+
+            {/* Radial divider line at segment start */}
+            <line
+              x1={innerStart.x} y1={innerStart.y}
+              x2={outerStart.x} y2={outerStart.y}
+              stroke="#d1d5db"
+              strokeWidth="1.5"
             />
 
-            {/* Sign symbol */}
+            {/* Sign symbol — outside the band */}
             <text
-              x={getPointOnCircle(midAngle, radius + 20, centerX, centerY).x}
-              y={getPointOnCircle(midAngle, radius + 20, centerX, centerY).y}
-              fontSize="24"
+              x={getPointOnCircle(midAngle, radius + 18, centerX, centerY).x}
+              y={getPointOnCircle(midAngle, radius + 18, centerX, centerY).y}
+              fontSize="20"
               fill={sign.color}
               textAnchor="middle"
               dominantBaseline="middle"
@@ -207,15 +229,10 @@ const ZodiacRing = ({
         );
       })}
 
-      {/* Outer circle border */}
-      <circle
-        cx={centerX}
-        cy={centerY}
-        r={radius}
-        fill="none"
-        stroke="#4b5563"
-        strokeWidth="3"
-      />
+      {/* Outer border */}
+      <circle cx={centerX} cy={centerY} r={radius}  fill="none" stroke="#6b7280" strokeWidth="2" />
+      {/* Inner border of zodiac band */}
+      <circle cx={centerX} cy={centerY} r={innerR}  fill="none" stroke="#6b7280" strokeWidth="1.5" />
     </g>
   );
 };
