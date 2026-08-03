@@ -146,11 +146,11 @@ const HamburgerMenu = ({ onLogout }: { onLogout: () => void }) => {
 
 // --- Chart Components ---
 
-const ELEMENT_FILL: Record<string, string> = {
-  fire:  "rgba(239,68,68,0.18)",
-  earth: "rgba(16,185,129,0.15)",
-  air:   "rgba(245,158,11,0.15)",
-  water: "rgba(139,92,246,0.18)",
+const ELEMENT_COLOR: Record<string, string> = {
+  fire:  "#ef4444",
+  earth: "#10b981",
+  air:   "#f59e0b",
+  water: "#8b5cf6",
 };
 
 const ZodiacRing = ({
@@ -177,62 +177,75 @@ const ZodiacRing = ({
     { name: "Pisces",      symbol: "♓", color: "#8b5cf6", element: "water" },
   ];
 
-  // The zodiac band occupies the ring between innerR and radius.
-  const innerR = radius - 40;
+  // Outer band ring: radius-40 to radius
+  const bandInnerR = radius - 40;
 
   return (
     <g>
+      {/* Step 1: pie slices from center to outer circle, one per sign */}
       {zodiacSigns.map((sign, index) => {
         const startAngle = 180 + index * 30;
         const endAngle   = startAngle + 30;
-        const midAngle   = startAngle + 15;
-
-        const outerStart = getPointOnCircle(startAngle, radius,  centerX, centerY);
-        const outerEnd   = getPointOnCircle(endAngle,   radius,  centerX, centerY);
-        const innerStart = getPointOnCircle(startAngle, innerR,  centerX, centerY);
-        const innerEnd   = getPointOnCircle(endAngle,   innerR,  centerX, centerY);
-
-        // Filled ring-segment path (outer arc → line in → inner arc back → close)
-        const segPath = [
-          `M ${outerStart.x} ${outerStart.y}`,
+        const outerStart = getPointOnCircle(startAngle, radius, centerX, centerY);
+        const outerEnd   = getPointOnCircle(endAngle,   radius, centerX, centerY);
+        const piePath = [
+          `M ${centerX} ${centerY}`,
+          `L ${outerStart.x} ${outerStart.y}`,
           `A ${radius} ${radius} 0 0 0 ${outerEnd.x} ${outerEnd.y}`,
-          `L ${innerEnd.x} ${innerEnd.y}`,
-          `A ${innerR} ${innerR} 0 0 1 ${innerStart.x} ${innerStart.y}`,
           `Z`,
         ].join(" ");
-
         return (
-          <g key={sign.name}>
-            {/* Filled element-coloured band segment */}
-            <path d={segPath} fill={ELEMENT_FILL[sign.element]} stroke="none" />
-
-            {/* Radial divider line at segment start */}
-            <line
-              x1={innerStart.x} y1={innerStart.y}
-              x2={outerStart.x} y2={outerStart.y}
-              stroke="#d1d5db"
-              strokeWidth="1.5"
-            />
-
-            {/* Sign symbol — outside the band */}
-            <text
-              x={getPointOnCircle(midAngle, radius + 18, centerX, centerY).x}
-              y={getPointOnCircle(midAngle, radius + 18, centerX, centerY).y}
-              fontSize="20"
-              fill={sign.color}
-              textAnchor="middle"
-              dominantBaseline="middle"
-            >
-              {sign.symbol}
-            </text>
-          </g>
+          <path
+            key={sign.name}
+            d={piePath}
+            fill={ELEMENT_COLOR[sign.element]}
+            fillOpacity="0.28"
+            stroke="none"
+          />
         );
       })}
 
-      {/* Outer border */}
-      <circle cx={centerX} cy={centerY} r={radius}  fill="none" stroke="#6b7280" strokeWidth="2" />
-      {/* Inner border of zodiac band */}
-      <circle cx={centerX} cy={centerY} r={innerR}  fill="none" stroke="#6b7280" strokeWidth="1.5" />
+      {/* Step 2: solid circle to mask everything inside the band */}
+      <circle cx={centerX} cy={centerY} r={bandInnerR} fill="#111827" stroke="none" />
+
+      {/* Step 3: divider lines at each 30° boundary, spanning band only */}
+      {zodiacSigns.map((sign, index) => {
+        const angle = 180 + index * 30;
+        const inner = getPointOnCircle(angle, bandInnerR, centerX, centerY);
+        const outer = getPointOnCircle(angle, radius,     centerX, centerY);
+        return (
+          <line
+            key={`div-${sign.name}`}
+            x1={inner.x} y1={inner.y}
+            x2={outer.x} y2={outer.y}
+            stroke="#ffffff"
+            strokeWidth="2"
+          />
+        );
+      })}
+
+      {/* Step 4: sign symbols outside the band */}
+      {zodiacSigns.map((sign, index) => {
+        const midAngle = 180 + index * 30 + 15;
+        const pt = getPointOnCircle(midAngle, radius + 18, centerX, centerY);
+        return (
+          <text
+            key={`sym-${sign.name}`}
+            x={pt.x}
+            y={pt.y}
+            fontSize="20"
+            fill={sign.color}
+            textAnchor="middle"
+            dominantBaseline="middle"
+          >
+            {sign.symbol}
+          </text>
+        );
+      })}
+
+      {/* Step 5: ring borders */}
+      <circle cx={centerX} cy={centerY} r={radius}     fill="none" stroke="#6b7280" strokeWidth="2" />
+      <circle cx={centerX} cy={centerY} r={bandInnerR} fill="none" stroke="#6b7280" strokeWidth="1.5" />
     </g>
   );
 };
