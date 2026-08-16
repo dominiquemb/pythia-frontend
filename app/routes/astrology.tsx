@@ -2506,6 +2506,17 @@ export default function App() {
     const baseApiUrl = import.meta.env.VITE_API_URI;
     const endpoint = singleResponseMode ? '/query' : '/chat';
     const shouldEncrypt = !singleResponseMode && encryptionEnabled;
+    const attachedFilesForRequest = Array.isArray(queryPayload.files)
+      ? queryPayload.files
+      : queryPayload.imageData
+        ? [queryPayload.imageData]
+        : [];
+    const submittedQuestion = (queryPayload.userQuestion || "").trim();
+    const modelUserQuestion = submittedQuestion || (
+      attachedFilesForRequest.length
+        ? "Please analyze the attached image."
+        : ""
+    );
 
     try {
       let encryptionReady = encryptionStatus === "unlocked";
@@ -2635,13 +2646,14 @@ export default function App() {
         }
       }
 
-      const allContextBlocks = [...historyBlocks, `User: ${queryPayload.userQuestion}`];
+      const allContextBlocks = [...historyBlocks, `User: ${modelUserQuestion}`];
       const finalUserMessageForModel = `Context:\n${allContextBlocks.join("\n----\n")}${prefetchedTransitTable}`;
 
       const requestBody = {
         userId,
         chartData: JSON.stringify(chartDataForQuery),
-        userMessage: queryPayload.userQuestion, // API expects userMessage, not userQuestion
+        userMessage: modelUserQuestion,
+        userQuestion: modelUserQuestion,
         finalUserMessage: finalUserMessageForModel,
         chatHistoryContext: historyContextForRequest || [],
         progressed: queryPayload.progressed,
@@ -2650,6 +2662,7 @@ export default function App() {
         // Only send transitRange if pre-fetch failed (fallback to backend calculation)
         transitRange: prefetchedTransitTable ? null : queryPayload.transitRange,
         ...(queryPayload.imageData && { imageData: queryPayload.imageData }),
+        ...(attachedFilesForRequest.length && { files: attachedFilesForRequest }),
         ...(!singleResponseMode && {
           conversationId: resolvedConversationId,
           saveToHistory: !shouldEncrypt,
@@ -2676,7 +2689,7 @@ export default function App() {
 
         if (shouldEncrypt) {
           const [encryptedUser, encryptedAssistant] = await Promise.all([
-            encryptText(queryPayload.userQuestion),
+            encryptText(modelUserQuestion),
             encryptText(data.response),
           ]);
 
@@ -2689,7 +2702,7 @@ export default function App() {
             body: JSON.stringify({
               userId,
               conversationId: resultingConversationId || currentConversationId,
-              conversationTitle: queryPayload.userQuestion,
+              conversationTitle: modelUserQuestion,
               userMessageEncrypted: encryptedUser.ciphertext,
               assistantResponseEncrypted: encryptedAssistant.ciphertext,
               encryptionIVUser: encryptedUser.iv,
@@ -2715,7 +2728,7 @@ export default function App() {
         const newMessage: ChatMessage = {
           messageId: data.messageId || Date.now(),
           conversationId: resultingConversationId || undefined,
-          userMessage: queryPayload.userQuestion,
+          userMessage: modelUserQuestion,
           assistantResponse: data.response,
           eventIdsUsed: selectedEventIds,
           createdAt: new Date().toISOString(),
